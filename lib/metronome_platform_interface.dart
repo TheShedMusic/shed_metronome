@@ -92,15 +92,15 @@ abstract class MetronomePlatform extends PlatformInterface {
   }
 
   Future<void> setMicVolume(double volume) {
-    throw UnimplementedError('setMicVolume() has not been implemented.')
+    throw UnimplementedError('setMicVolume() has not been implemented.');
   }
 
   Future<bool> startRecording(String path) {
-    throw UnimplementedError('startRecording() has not been implemented.')
+    throw UnimplementedError('startRecording() has not been implemented.');
   }
 
   Future<String?> stopRecording() {
-    throw UnimplementedError('stopRecording() has not been implemented.')
+    throw UnimplementedError('stopRecording() has not been implemented.');
   }
 
   Future<void> destroy() {
