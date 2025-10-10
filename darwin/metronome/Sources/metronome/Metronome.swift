@@ -77,20 +77,20 @@ class Metronome {
     /// Enable microphone input and connect it to the mixer
     /// This must be called before recording to capture mic audio
     public func enableMicrophone() throws {
-        guard let engine = audioEngine else {
+        guard audioEngine != nil else {
             throw NSError(domain: "Metronome", code: -1,
                           userInfo: [NSLocalizedDescriptionKey: "Audio engine not inititalized"])
         }
         
-        inputNode = engine.inputNode
+        inputNode = audioEngine.inputNode
         
         micVolumeNode = AVAudioMixerNode()
-        engine.attach(micVolumeNode!)
+        audioEngine.attach(micVolumeNode!)
         
         let inputFormat = inputNode!.outputFormat(forBus: 0)
         
-        engine.connect(inputNode!, to: micVolumeNode!, format: inputFormat)
-        engine.connect(micVolumeNode!, to:mixerNode, format: inputFormat)
+        audioEngine.connect(inputNode!, to: micVolumeNode!, format: inputFormat)
+        audioEngine.connect(micVolumeNode!, to:mixerNode, format: inputFormat)
         
         micVolumeNode?.outputVolume = 1.0
         
