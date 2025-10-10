@@ -79,9 +79,6 @@ class Metronome {
         }
         // Set volume
         setVolume(volume:volume)
-        // Register engine with shared singleton for external access
-        SharedMetronomeEngine.shared.register(audioEngine, mixer: mixerNode)
-        print("[Metronome] Registered engine with SharedMetronomeEngine")
 #if os(iOS)
         setupNotifications()
 #endif
@@ -383,9 +380,6 @@ class Metronome {
     }
 
     func destroy() {
-        // Unregister from shared singleton first
-        SharedMetronomeEngine.shared.unregister()
-        
         audioPlayerNode.reset()
         audioPlayerNode.stop()
         audioEngine.reset()
