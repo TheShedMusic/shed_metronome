@@ -82,15 +82,18 @@ class Metronome {
         micVolumeNode = AVAudioMixerNode()
         audioEngine.attach(micVolumeNode!)
         
+        let inputFormat = inputNode?.outputFormat(forBus: 0)
         let mixerFormat = mixerNode.outputFormat(forBus: 0)
         
-        audioEngine.connect(inputNode!, to: micVolumeNode!, format: nil)
-        audioEngine.connect(micVolumeNode!, to:mixerNode, format: nil)
+        print("[Metronome] Microphone input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
+        print("[Metronome] Mixer format: \(mixerFormat.sampleRate)Hz, \(mixerFormat.channelCount) channels")
+        
+        audioEngine.connect(inputNode!, to: micVolumeNode!, format: inputFormat)
+        audioEngine.connect(micVolumeNode!, to:mixerNode, format: mixerFormat)
         
         micVolumeNode?.outputVolume = 1.0
         
         print("[Metronome] Microphone enabled and connected to mixer")
-        print("[Metronome]   Mixer format: \(mixerFormat.sampleRate)Hz, \(mixerFormat.channelCount) channels")
     }
     
     public func setMicVolume(_ volume: Float) {
