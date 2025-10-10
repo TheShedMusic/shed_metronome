@@ -117,6 +117,50 @@ class Metronome {
     return timeSignature ?? 0;
   }
 
+  ///enable microphone input for recording
+  ///must be called before startRecording()
+  Future<bool> enableMicrophone() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('enableMicrophone');
+      return result ?? false;
+    } catch (e) {
+      print('[Metronome] Error enabling microphone: $e');
+      return false;
+    }
+  }
+
+  /// set microphone volume (0.0 to 1.0)
+  Future<void> setMicVolume(double volume) async {
+    try {
+      await _channel.invokeMethod('setMicVolume', volume);
+    } catch (e) {
+      print('[Metronome] Error setting mic volume: $e');
+    }
+  }
+
+  ///start recording audio (captures both clicks and microphone)
+  /// [path] - Full file path where recording will be saved (must end in .wav for now)
+  Future<bool> startRecording(String path) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('startRecording', path);
+      return result ?? false;
+    } catch (e) {
+      print('[Metronome] Error starting recording: $e');
+      return false;
+    }
+  }
+
+  ///stop recording and finalize audio file
+  Future<String?> stopRecording() async {
+    try {
+      final result = await _channel.invokeMethod<String>('stopRecording');
+      return result;
+    } catch e {
+      print('[Metronome] Error stopping recording: $e');
+      return null;
+    }
+  }
+
   ///destroy the metronome
   Future<void> destroy() async {
     _initialized = false;

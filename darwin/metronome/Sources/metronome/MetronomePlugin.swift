@@ -70,6 +70,36 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               case "destroy":
                   metronome?.destroy()
                 break;
+          case "enableMicrophone":
+              do {
+                  try metronome?.enableMicrophone()
+                  result(true)
+              } catch {
+                  result(FlutterError(code: "MICROPHONE_ERROR",
+                                      message: "Failed to enable microphone: \(error.localizedDescription)",
+                                      details: nil))
+              }
+          case "setMicVolume":
+              guard let volume = call.arguments as? Double else {
+                  result(FlutterError(code: "INVALID_ARGUMENT",
+                                      message: "Volume must be a number between 0.0 and 1.0",
+                                      details: nil))
+                  return
+              }
+              metronome?.setMicVolume(Float(volume))
+              result(nil)
+          case "startRecording":
+              guard let path = call.arguments as? String else {
+                  result(FlutterError(code: "INVALID_ARGUMENT",
+                                            message: "Recording path is required",
+                                            details: nil))
+                          return
+              }
+              let success = metronome?.startRecording(path: path) ?? false
+              result(success)
+          case "stopRecording":
+              let filePath = metronome?.stopRecording()
+              result(filePath)
               default:
                   result("unkown")
                 break;
