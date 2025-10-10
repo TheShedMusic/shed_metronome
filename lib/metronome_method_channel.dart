@@ -234,6 +234,63 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
+  Future<bool> enableMicrophone() async {
+    try {
+      return await methodChannel.invokeMethod<bool>('enableMicrophone');
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+
+      return false;
+    }
+  }
+
+  @override
+  Future<void> setMicVolume(double volume) async {
+    if (volume < 0.0 || volume > 1.0) {
+      throw Exception('Mic volume must be between 0.0 and 1.0'); 
+    }
+
+    try {
+      await methodChannel.invokeMethod<void>('setMicVolume', {
+        'volume': volume,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+    }
+  }
+
+  @override
+  Future<bool> startRecording(String path) {
+    try {
+      final result = await methodChannel.invokeMethod<bool>('startRecording', {
+        'path': path,
+        });
+        return result ?? false;
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+      return false;
+    }
+  }
+
+  @override
+  Future<String?> stopRecording() async {
+    try {
+      return await methodChannel.invokeMethod<String>('stopRecording');
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+      return null;
+    }
+  }
+
+  @override
   Future<void> destroy() async {
     try {
       await methodChannel.invokeMethod<void>('destroy');
