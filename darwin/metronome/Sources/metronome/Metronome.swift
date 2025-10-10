@@ -79,6 +79,10 @@ class Metronome {
     public func enableMicrophone() throws {
         inputNode = audioEngine.inputNode
         
+        guard let inputNode = inputNode else {
+                throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to access input node"])
+            }
+        
         micVolumeNode = AVAudioMixerNode()
         audioEngine.attach(micVolumeNode!)
         
