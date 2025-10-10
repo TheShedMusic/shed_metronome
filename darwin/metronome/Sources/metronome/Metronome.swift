@@ -100,6 +100,64 @@ class Metronome {
     public func setMicVolume(_ volume: Float) {
         micVolumeNode?.outputVolume = max(0.0, min(1.0, volume))
     }
+    /// Start recording audio from the mixer (captures both clicks and microphone)
+    public func startRecording(path: String) -> Bool {
+        guard !isRecording else {
+            print("[Metronome] Already recording")
+            return false
+        }
+        
+        do {
+            let url = URL(fileURLWithPath: path)
+            
+            // Get the mixer's output format
+            let mixerFormat = mixerNode.outputFormat(forBus: 0)
+            
+            print("[Metronome] Starting recording with format:")
+            print(" Sample rate: \(mixerFormat.sampleRate)")
+            print(" Channels: \(mixerFormat.channelCount)")
+            print(" Path: \(path)")
+            
+            // Create the audio file for recording
+            audioFileRecording = try AVAudioFile(forWriting: url, settings: mixerFormat.settings)
+            
+            // Install tap on mixer to capture audio
+            // Using formate: mil tells it to use the mixer's native format
+            mixerNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, time in
+                guard let self = self, let file = self.audioFileRecording else {return}
+                do {
+                    try file.write(from: buffer)
+                } catch {
+                    print("[Metronome] Error writing audio buffer: \(error)")
+                }
+            }
+            
+            isRecording = true
+            print("[Metronome] Recording started")
+            return true
+        } catch {
+            print("[Metronome] Failed to start recording: \(error)")
+            return false
+        }
+    }
+    /// Stop recording and finalize the audio file
+    public func stopRecording() -> String? {
+        guard isRecording else {
+            print("[Metronome] Not currently recording")
+            return nil
+        }
+        
+        mixerNode.removeTap(onBus: 0)
+        
+        let filePath = audioFileRecording?.url.path
+        
+        audioFileRecording = nil
+        isRecording = false
+        
+        print("[Metronome] Recording stopped: \(filePath ?? "unknown")")
+        return filePath
+    }
+    
     /// Start the metronome.
     func play() {
         if !audioEngine.isRunning {
