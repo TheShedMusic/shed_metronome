@@ -89,7 +89,8 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               metronome?.setMicVolume(Float(volume))
               result(nil)
           case "startRecording":
-              guard let path = call.arguments as? String else {
+              guard let args = call.arguments as? [String: Any],
+                    let path = args["path"] as? String else {
                   result(FlutterError(code: "INVALID_ARGUMENT",
                                             message: "Recording path is required",
                                             details: nil))
