@@ -88,7 +88,7 @@ class Metronome {
         print("[Metronome] Microphone input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
         print("[Metronome] Mixer format: \(mixerFormat.sampleRate)Hz, \(mixerFormat.channelCount) channels")
         
-        audioEngine.connect(inputNode!, to: micVolumeNode!, format: inputFormat)
+        audioEngine.connect(inputNode, to: micVolumeNode!, format: inputFormat)
         audioEngine.connect(micVolumeNode!, to:mixerNode, format: mixerFormat)
         
         micVolumeNode?.outputVolume = 1.0
