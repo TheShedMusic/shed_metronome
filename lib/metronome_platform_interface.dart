@@ -87,6 +87,22 @@ abstract class MetronomePlatform extends PlatformInterface {
     throw UnimplementedError('getTimeSignature() has not been implemented.');
   }
 
+  Future<bool> enableMicrophone() {
+    throw UnimplementedError('enableMicrophone() has not been implemented.');
+  }
+
+  Future<void> setMicVolume(double volume) {
+    throw UnimplementedError('setMicVolume() has not been implemented.')
+  }
+
+  Future<bool> startRecording(String path) {
+    throw UnimplementedError('startRecording() has not been implemented.')
+  }
+
+  Future<String?> stopRecording() {
+    throw UnimplementedError('stopRecording() has not been implemented.')
+  }
+
   Future<void> destroy() {
     throw UnimplementedError('destroy() has not been implemented.');
   }

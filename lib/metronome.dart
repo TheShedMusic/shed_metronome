@@ -121,7 +121,7 @@ class Metronome {
   ///must be called before startRecording()
   Future<bool> enableMicrophone() async {
     try {
-      final result = await _channel.invokeMethod<bool>('enableMicrophone');
+      final result = await MetronomePlatform.instance.enableMicrophone();
       return result ?? false;
     } catch (e) {
       print('[Metronome] Error enabling microphone: $e');
@@ -132,7 +132,7 @@ class Metronome {
   /// set microphone volume (0.0 to 1.0)
   Future<void> setMicVolume(double volume) async {
     try {
-      await _channel.invokeMethod('setMicVolume', volume);
+      await MetronomePlatform.instance.setMicVolume(volume);
     } catch (e) {
       print('[Metronome] Error setting mic volume: $e');
     }
@@ -142,7 +142,7 @@ class Metronome {
   /// [path] - Full file path where recording will be saved (must end in .wav for now)
   Future<bool> startRecording(String path) async {
     try {
-      final result = await _channel.invokeMethod<bool>('startRecording', path);
+      final result = await MetronomePlatform.instance.startRecording(path);
       return result ?? false;
     } catch (e) {
       print('[Metronome] Error starting recording: $e');
@@ -153,9 +153,9 @@ class Metronome {
   ///stop recording and finalize audio file
   Future<String?> stopRecording() async {
     try {
-      final result = await _channel.invokeMethod<String>('stopRecording');
+      final result = await MetronomePlatform.instance.stopRecording();
       return result;
-    } catch e {
+    } catch (e) {
       print('[Metronome] Error stopping recording: $e');
       return null;
     }
