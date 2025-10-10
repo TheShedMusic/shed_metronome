@@ -236,7 +236,8 @@ class MethodChannelMetronome extends MetronomePlatform {
   @override
   Future<bool> enableMicrophone() async {
     try {
-      return await methodChannel.invokeMethod<bool>('enableMicrophone');
+      final result = await methodChannel.invokeMethod<bool>('enableMicrophone');
+      return result ?? false;
     } catch (e) {
       if (kDebugMode) {
         print(e);
@@ -264,7 +265,7 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
-  Future<bool> startRecording(String path) {
+  Future<bool> startRecording(String path) async {
     try {
       final result = await methodChannel.invokeMethod<bool>('startRecording', {
         'path': path,
