@@ -72,8 +72,6 @@ class Metronome {
         micVolumeNode = AVAudioMixerNode()
         audioEngine.attach(micVolumeNode!)
         
-        // Get hardware sample rate
-        let hardwareSampleRate = audioSession.sampleRate
         let inputFormat = AVAudioFormat(standardFormatWithSampleRate: hardwareSampleRate, channels: 2)!
         let mixerFormat = mixerNode.outputFormat(forBus: 0)
         
