@@ -82,7 +82,7 @@ class Metronome {
         micVolumeNode = AVAudioMixerNode()
         audioEngine.attach(micVolumeNode!)
         
-        let inputFormat = inputNode?.outputFormat(forBus: 0)
+        let inputFormat = inputNode.outputFormat(forBus: 0)
         let mixerFormat = mixerNode.outputFormat(forBus: 0)
         
         print("[Metronome] Microphone input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
