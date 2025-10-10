@@ -34,6 +34,7 @@ class Metronome {
         }else{
             audioFileAccented = try! AVAudioFile(fromData: accentedFileBytes)
         }
+        var hardwareSampleRate: Double = 48000.0
 #if os(iOS)
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -44,6 +45,7 @@ class Metronome {
             )
             
             try audioSession.setActive(true)
+            hardwareSampleRate = audioSession.sampleRate
         } catch {
             print("Failed to set audio session category: \(error)")
         }
@@ -65,6 +67,25 @@ class Metronome {
                 print("Failed to start audio engine: \(error.localizedDescription)")
             }
         }
+        // Set up microphone input
+        inputNode = audioEngine.inputNode
+        micVolumeNode = AVAudioMixerNode()
+        audioEngine.attach(micVolumeNode!)
+        
+        // Get hardware sample rate
+        let hardwareSampleRate = audioSession.sampleRate
+        let inputFormat = AVAudioFormat(standardFormatWithSampleRate: hardwareSampleRate, channels: 2)!
+        let mixerFormat = mixerNode.outputFormat(forBus: 0)
+        
+        print("[Metronome] Hardware sample rate: \(hardwareSampleRate)Hz")
+        print("[Metronome] Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
+        print("[Metronome] Mixer format: \(mixerFormat.sampleRate)Hz, \(mixerFormat.channelCount) channels")
+        
+        audioEngine.connect(inputNode!, to: micVolumeNode!, format: inputFormat)
+        audioEngine.connect(micVolumeNode!, to: mixerNode, format: mixerFormat)
+        micVolumeNode?.outputVolume = 1.0
+        
+        print("[Metronome] Microphone input inititalized")
         // Set volume
         setVolume(volume:volume)
         // Register engine with shared singleton for external access
@@ -77,27 +98,10 @@ class Metronome {
     /// Enable microphone input and connect it to the mixer
     /// This must be called before recording to capture mic audio
     public func enableMicrophone() throws {
-        inputNode = audioEngine.inputNode
-        
-        guard let inputNode = inputNode else {
-                throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to access input node"])
-            }
-        
-        micVolumeNode = AVAudioMixerNode()
-        audioEngine.attach(micVolumeNode!)
-        
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        let mixerFormat = mixerNode.outputFormat(forBus: 0)
-        
-        print("[Metronome] Microphone input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
-        print("[Metronome] Mixer format: \(mixerFormat.sampleRate)Hz, \(mixerFormat.channelCount) channels")
-        
-        audioEngine.connect(inputNode, to: micVolumeNode!, format: inputFormat)
-        audioEngine.connect(micVolumeNode!, to:mixerNode, format: mixerFormat)
-        
-        micVolumeNode?.outputVolume = 1.0
-        
-        print("[Metronome] Microphone enabled and connected to mixer")
+        guard inputNode != nil && micVolumeNode != nil else {
+            throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey : "Microphone input not initialized"])
+        }
+        print("[Metronome] Microphone ready")
     }
     
     public func setMicVolume(_ volume: Float) {
