@@ -1,6 +1,6 @@
 import AVFoundation
 
-class Metronome {
+class Metronome: MetronomeInterface {
     private var eventTick: EventTickHandler?
     private var audioPlayerNode: AVAudioPlayerNode = AVAudioPlayerNode()
     private var audioEngine: AVAudioEngine = AVAudioEngine()
@@ -172,41 +172,29 @@ class Metronome {
         isRecording = false
         recordingStartTime = nil
         
-        let firstClickTime = clickTimeStamps.first ?? 0.0
-        let offsetTimestamps = clickTimeStamps.map { $0 - firstClickTime }
-        
         let result: [String: Any] = [
             "path": filePath ?? "",
-            "timings": offsetTimestamps,
+            "timings": clickTimeStamps,
             "bpm": audioBpm,
-            "timeSignature": audioTimeSignature,
-            "latencyOffset": firstClickTime
+            "timeSignature": audioTimeSignature
         ]
         
         clickTimeStamps = []
         
-        print("[Metronome] Recording stopped")
-           print("  Clicks captured: \(offsetTimestamps.count)")
-           print("  Latency offset applied: \(String(format: "%.3f", firstClickTime))s")
-           print("  First click now at: \(String(format: "%.3f", offsetTimestamps.first ?? 0))s")
+        print("[Metronome] Recording stopped with \(result["timings"] as? [Double] ?? []).count clicks")
         return result
     }
     
     /// Start the metronome.
-    func play() {
+    func play() throws {
         if !audioEngine.isRunning {
-            do {
-                try audioEngine.start()
-            } catch {
-                print("Audio engine failed to start in play(): \(error)")
-                return
-            }
+            try audioEngine.start()
         }
         audioBuffer = generateBuffer()
     }
 
     /// Pause the metronome.
-    func pause() {
+    func pause() throws {
         stop()
     }
     
