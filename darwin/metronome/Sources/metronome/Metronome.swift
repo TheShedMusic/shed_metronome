@@ -172,16 +172,23 @@ class Metronome {
         isRecording = false
         recordingStartTime = nil
         
+        let firstClickTime = clickTimeStamps.first ?? 0.0
+        let offsetTimestamps = clickTimeStamps.map { $0 - firstClickTime }
+        
         let result: [String: Any] = [
             "path": filePath ?? "",
-            "timings": clickTimeStamps,
+            "timings": offsetTimestamps,
             "bpm": audioBpm,
-            "timeSignature": audioTimeSignature
+            "timeSignature": audioTimeSignature,
+            "latencyOffset": firstClickTime
         ]
         
         clickTimeStamps = []
         
-        print("[Metronome] Recording stopped with \(result["timings"] as? [Double] ?? []).count clicks")
+        print("[Metronome] Recording stopped")
+           print("  Clicks captured: \(offsetTimestamps.count)")
+           print("  Latency offset applied: \(String(format: "%.3f", firstClickTime))s")
+           print("  First click now at: \(String(format: "%.3f", offsetTimestamps.first ?? 0))s")
         return result
     }
     
