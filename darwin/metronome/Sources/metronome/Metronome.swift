@@ -65,7 +65,7 @@ class Metronome {
         audioEngine.connect(inputNode!, to: micVolumeNode!, format: nil)
         audioEngine.connect(micVolumeNode!, to: mixerNode, format: nil)
         
-        micVolumeNode?.outputVolume = 1.0
+        micVolumeNode?.outputVolume = 0.0
         
         audioEngine.prepare()
         // Start the audio engine
