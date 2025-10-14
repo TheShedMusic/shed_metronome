@@ -7,12 +7,12 @@ import Foundation
 /// The buffer uses atomic operations and a single-producer, single-consumer pattern:
 /// - Producer: Audio render callback (real-time thread) writes samples
 /// - Consumer: File writer thread (background) reads samples
-class CircularBuffer {
+class CircularBuffer<T> {
     
     // MARK: - Properties
     
     /// The underlying storage for audio samples
-    private var buffer: UnsafeMutablePointer<Float>
+    private var buffer: UnsafeMutablePointer<T>
     
     /// Total capacity of the buffer in samples
     private let capacity: Int
@@ -30,14 +30,14 @@ class CircularBuffer {
     
     /// Initialize a circular buffer with the specified capacity
     /// - Parameter capacity: Number of samples the buffer can hold (recommend 48000 * 10 = 10 seconds at 48kHz)
-    init(capacity: Int) {
+    init(capacity: Int) where T: Numeric {
         self.capacity = capacity
         
         // Allocate memory for the buffer
-        self.buffer = UnsafeMutablePointer<Float>.allocate(capacity: capacity)
+        self.buffer = UnsafeMutablePointer<T>.allocate(capacity: capacity)
         
         // Initialize all samples to zero
-        self.buffer.initialize(repeating: 0.0, count: capacity)
+        self.buffer.initialize(repeating: T.zero, count: capacity)
         
         print("[CircularBuffer] Initialized with capacity: \(capacity) samples (\(Double(capacity) / 48000.0) seconds at 48kHz)")
     }
@@ -55,7 +55,7 @@ class CircularBuffer {
     /// - Parameter sample: The audio sample to write
     /// - Returns: true if written successfully, false if buffer is full
     @inline(__always)
-    func write(_ sample: Float) -> Bool {
+    func write(_ sample: T) -> Bool {
         // Calculate next write position
         let nextWrite = (writeIndex + 1) % capacity
         
@@ -77,7 +77,7 @@ class CircularBuffer {
     /// - Parameter samples: Array of samples to write
     /// - Returns: Number of samples actually written
     @inline(__always)
-    func write(_ samples: UnsafePointer<Float>, count: Int) -> Int {
+    func write(_ samples: UnsafePointer<T>, count: Int) -> Int {
         var written = 0
         
         for i in 0..<count {
@@ -100,8 +100,8 @@ class CircularBuffer {
     /// Read samples from the buffer
     /// - Parameter maxCount: Maximum number of samples to read
     /// - Returns: Array of samples read
-    func read(maxCount: Int) -> [Float] {
-        var samples: [Float] = []
+    func read(maxCount: Int) -> [T] {
+        var samples: [T] = []
         samples.reserveCapacity(maxCount)
         
         var samplesRead = 0
@@ -120,7 +120,7 @@ class CircularBuffer {
     ///   - destination: Pointer to destination buffer
     ///   - maxCount: Maximum number of samples to read
     /// - Returns: Number of samples actually read
-    func read(into destination: UnsafeMutablePointer<Float>, maxCount: Int) -> Int {
+    func read(into destination: UnsafeMutablePointer<T>, maxCount: Int) -> Int {
         var samplesRead = 0
         
         while samplesRead < maxCount && readIndex != writeIndex {
