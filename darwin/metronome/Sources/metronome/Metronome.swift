@@ -260,8 +260,8 @@ class Metronome {
         return audioTimeSignature
     }
     
-    var getVolume: Int {
-        return Int(audioVolume * 100)
+    var getVolume: Float {
+        return audioVolume
     }
     
     func setVolume(volume: Float) {
