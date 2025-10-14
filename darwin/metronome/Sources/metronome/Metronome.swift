@@ -11,6 +11,8 @@ class Metronome {
     private var micVolumeNode: AVAudioMixerNode?
     private var audioFileRecording: AVAudioFile?
     private var isRecording = false
+    private var recordingStartTime: AVAudioTime?
+    private var clickTimeStamps: [Double] = []
     //
     private var audioFileMain: AVAudioFile
     private var audioFileAccented: AVAudioFile
@@ -95,36 +97,47 @@ class Metronome {
     public func setMicVolume(_ volume: Float) {
         micVolumeNode?.outputVolume = max(0.0, min(1.0, volume))
     }
-    /// Start recording audio from the mixer (captures both clicks and microphone)
+    /// Start recording audio from the mic (mic only, no clicks)
     public func startRecording(path: String) -> Bool {
         guard !isRecording else {
             print("[Metronome] Already recording")
             return false
         }
         
+        guard let inputNode = inputNode else {
+            print("[Metronome] Input node not available")
+            return false
+        }
+        
         do {
             let url = URL(fileURLWithPath: path)
             
-            // Get the mixer's output format
-            let mixerFormat = mixerNode.outputFormat(forBus: 0)
-            
-            print("[Metronome] Starting recording with format:")
-            print(" Sample rate: \(mixerFormat.sampleRate)")
-            print(" Channels: \(mixerFormat.channelCount)")
-            print(" Path: \(path)")
-            
-            // Create the audio file for recording
-            audioFileRecording = try AVAudioFile(forWriting: url, settings: mixerFormat.settings)
-            
-            // Install tap on mixer to capture audio
-            // Using formate: mil tells it to use the mixer's native format
-            guard let inputNode = inputNode else {
-                print("[Metronome] Input node not available")
+            // Create a standard recording format (44.1kHz, stereo)
+            guard let recordingFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 44100,
+                channels: 2,
+                interleaved: false
+            ) else {
+                print("[Metronome] Failed to create recording format")
                 return false
             }
             
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, time in
-                guard let self = self, let file = self.audioFileRecording else {return}
+            print("[Metronome] Starting recording:")
+            print(" Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
+            print(" Path: \(path)")
+            
+            // Create the audio file for recording
+            audioFileRecording = try AVAudioFile(forWriting: url, settings: recordingFormat.settings)
+            
+            // Capture the start time for click timing
+            recordingStartTime = audioPlayerNode.lastRenderTime
+            clickTimeStamps = []
+            print("[Metronome] Recording start time captured")
+            
+            // Install tap on input node with explicit format
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, time in
+                guard let self = self, let file = self.audioFileRecording else { return }
                 do {
                     try file.write(from: buffer)
                 } catch {
@@ -132,9 +145,8 @@ class Metronome {
                 }
             }
             
-            
             isRecording = true
-            print("[Metronome] Recording started")
+            print("[Metronome] Recording started (mic only, no monitoring)")
             return true
         } catch {
             print("[Metronome] Failed to start recording: \(error)")
@@ -142,7 +154,7 @@ class Metronome {
         }
     }
     /// Stop recording and finalize the audio file
-    public func stopRecording() -> String? {
+    public func stopRecording() -> [String: Any]? {
         guard isRecording else {
             print("[Metronome] Not currently recording")
             return nil
@@ -154,9 +166,19 @@ class Metronome {
         
         audioFileRecording = nil
         isRecording = false
+        recordingStartTime = nil
         
-        print("[Metronome] Recording stopped: \(filePath ?? "unknown")")
-        return filePath
+        let result: [String: Any] = [
+            "path": filePath ?? "",
+            "timings": clickTimeStamps,
+            "bpm": audioBpm,
+            "timeSignature": audioTimeSignature
+        ]
+        
+        clickTimeStamps = []
+        
+        print("[Metronome] Recording stopped with \(result["timings"] as? [Double] ?? []).count clicks")
+        return result
     }
     
     /// Start the metronome.
@@ -370,6 +392,11 @@ class Metronome {
 
             let currentBeat = Int(elapsedTime / beatDuration)
             let currentTick = (self.audioTimeSignature > 1) ? (currentBeat % self.audioTimeSignature) : 0
+            
+            if self.isRecording, let recordingStart = self.recordingStartTime {
+                let recordingElapsed = self.getElapsedTime(from: recordingStart, to: currentTime) ?? 0
+                self.clickTimeStamps.append(recordingElapsed)
+            }
 
             DispatchQueue.main.async {
                 self.eventTick?.send(res: currentTick)
