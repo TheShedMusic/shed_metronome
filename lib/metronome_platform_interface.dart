@@ -103,6 +103,25 @@ abstract class MetronomePlatform extends PlatformInterface {
     throw UnimplementedError('stopRecording() has not been implemented.');
   }
 
+  Future<String?> generateClickTrack({
+  required List<double> timestamps,
+  required int bpm,
+  required int timeSignature,
+  required Uint8List mainClickBytes,
+  required Uint8List accentedClickBytes,
+  required String outputPath,
+}) {
+  throw UnimplementedError('generateClickTrack() has not been implemented.');
+}
+
+Future<String?> mixAudioFiles({
+  required String micAudioPath,
+  required String clickTrackPath,
+  required String outputPath,
+}) {
+  throw UnimplementedError('mixAudioFiles() has not been implemented.');
+}
+
   Future<void> destroy() {
     throw UnimplementedError('destroy() has not been implemented.');
   }

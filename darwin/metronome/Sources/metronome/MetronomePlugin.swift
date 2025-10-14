@@ -101,6 +101,15 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
           case "stopRecording":
               let recordingResult = metronome?.stopRecording()
               result(recordingResult)
+          case "generateClickTrack":
+              let args = call.arguments as? [String: Any]
+              let clickTrackResult = generateClickTrack(attributes: args as NSDictionary?)
+              result(clickTrackResult)
+              
+          case "mixAudioFiles":
+              let args = call.arguments as? [String: Any]
+              let mixResult = mixAudioFiles(attributes: args as NSDictionary?)
+              result(mixResult)
               default:
                   result("unkown")
                 break;
@@ -152,5 +161,40 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
             let volume: Double = (attributes?["volume"] as? Double) ?? 0.5
             metronome?.setVolume(volume: Float(volume))
         }
+    }
+    private func generateClickTrack(attributes: NSDictionary?) -> String? {
+        guard let timestampsArray = attributes?["timestamps"] as? [Double],
+              let bpm = attributes?["bpm"] as? Int,
+              let timeSignature = attributes?["timeSignature"] as? Int,
+              let outputPath = attributes?["outputPath"] as? String,
+              let mainClickData = (attributes?["mainClickBytes"] as? FlutterStandardTypedData)?.data,
+              let accentedClickData = (attributes?["accentedClickBytes"] as? FlutterStandardTypedData)?.data else {
+            print("[MetronomePlugin] Invalid arguments for generateClickTrack")
+            return nil
+        }
+        
+        return ClickTrackGenerator.generateClickTrack(
+            clickTimestamps: timestampsArray,
+            bpm: bpm,
+            timeSignature: timeSignature,
+            mainClickData: mainClickData,
+            accentedClickData: accentedClickData,
+            outputPath: outputPath
+        )
+    }
+
+    private func mixAudioFiles(attributes: NSDictionary?) -> String? {
+        guard let micPath = attributes?["micAudioPath"] as? String,
+              let clickPath = attributes?["clickTrackPath"] as? String,
+              let outputPath = attributes?["outputPath"] as? String else {
+            print("[MetronomePlugin] Invalid arguments for mixAudioFiles")
+            return nil
+        }
+        
+        return AudioMixer.mixAudioFiles(
+            micAudioPath: micPath,
+            clickTrackPath: clickPath,
+            outputPath: outputPath
+        )
     }
 }

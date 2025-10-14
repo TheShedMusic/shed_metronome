@@ -293,6 +293,52 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
+Future<String?> generateClickTrack({
+  required List<double> timestamps,
+  required int bpm,
+  required int timeSignature,
+  required Uint8List mainClickBytes,
+  required Uint8List accentedClickBytes,
+  required String outputPath,
+}) async {
+  try {
+    return await methodChannel.invokeMethod<String>('generateClickTrack', {
+      'timestamps': timestamps,
+      'bpm': bpm,
+      'timeSignature': timeSignature,
+      'mainClickBytes': mainClickBytes,
+      'accentedClickBytes': accentedClickBytes,
+      'outputPath': outputPath,
+    });
+  } catch (e) {
+    if (kDebugMode) {
+      print('[Metronome] Error generating click track: $e');
+    }
+    return null;
+  }
+}
+
+@override
+Future<String?> mixAudioFiles({
+  required String micAudioPath,
+  required String clickTrackPath,
+  required String outputPath,
+}) async {
+  try {
+    return await methodChannel.invokeMethod<String>('mixAudioFiles', {
+      'micAudioPath': micAudioPath,
+      'clickTrackPath': clickTrackPath,
+      'outputPath': outputPath,
+    });
+  } catch (e) {
+    if (kDebugMode) {
+      print('[Metronome] Error mixing audio: $e');
+    }
+    return null;
+  }
+}
+
+  @override
   Future<void> destroy() async {
     try {
       await methodChannel.invokeMethod<void>('destroy');

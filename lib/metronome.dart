@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'metronome_platform_interface.dart';
 
@@ -160,6 +161,37 @@ class Metronome {
       return null;
     }
   }
+
+  Future<String?> generateClickTrack({
+  required List<double> timestamps,
+  required int bpm,
+  required int timeSignature,
+  required Uint8List mainClickBytes,
+  required Uint8List accentedClickBytes,
+  required String outputPath,
+}) async {
+  return MetronomePlatform.instance.generateClickTrack(
+    timestamps: timestamps,
+    bpm: bpm,
+    timeSignature: timeSignature,
+    mainClickBytes: mainClickBytes,
+    accentedClickBytes: accentedClickBytes,
+    outputPath: outputPath,
+  );
+}
+
+/// Mix microphone audio with click track
+Future<String?> mixAudioFiles({
+  required String micAudioPath,
+  required String clickTrackPath,
+  required String outputPath,
+}) async {
+  return MetronomePlatform.instance.mixAudioFiles(
+    micAudioPath: micAudioPath,
+    clickTrackPath: clickTrackPath,
+    outputPath: outputPath,
+  );
+}
 
   ///destroy the metronome
   Future<void> destroy() async {
