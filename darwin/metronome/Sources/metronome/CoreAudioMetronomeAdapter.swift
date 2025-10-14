@@ -1,0 +1,170 @@
+import Foundation
+import AVFoundation
+
+/// Adapter that makes CoreAudioMetronome conform to MetronomeInterface
+/// Bridges between the new Core Audio implementation and the existing Flutter plugin interface
+class CoreAudioMetronomeAdapter: MetronomeInterface {
+    
+    private var coreAudio: CoreAudioMetronome
+    private var eventTickHandler: EventTickHandler?
+    
+    // Properties to maintain compatibility
+    private var _bpm: Int = 120
+    private var _timeSignature: Int = 4
+    private var _volume: Float = 1.0
+    private var _micVolume: Float = 1.0
+    private var _isPlaying: Bool = false
+    private var _recordingPath: String?
+    
+    // Timing data for Flutter
+    private var recordingStartTime: TimeInterval = 0
+    private var clickTimestamps: [Double] = []
+    
+    init(mainFileBytes: Data, accentedFileBytes: Data, bpm: Int, timeSignature: Int, volume: Float, sampleRate: Int) throws {
+        self.coreAudio = try CoreAudioMetronome()
+        self._bpm = bpm
+        self._timeSignature = timeSignature
+        self._volume = volume
+        
+        // Load click sound from main file bytes
+        // TODO: Handle accented clicks
+        try loadClickSoundFromData(mainFileBytes)
+        
+        coreAudio.setBPM(Double(bpm))
+    }
+    
+    private func loadClickSoundFromData(_ data: Data) throws {
+        // Write to temporary file
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFile = tempDir.appendingPathComponent("click_temp.wav")
+        try data.write(to: tempFile)
+        
+        // Load into Core Audio metronome
+        try coreAudio.loadClickSound(from: tempFile)
+        
+        // Clean up temp file
+        try? FileManager.default.removeItem(at: tempFile)
+    }
+    
+    // MARK: - MetronomeInterface Implementation
+    
+    func play() throws {
+        try coreAudio.play()
+        _isPlaying = true
+        
+        // Start tracking clicks for Flutter callback
+        clickTimestamps = []
+    }
+    
+    func pause() throws {
+        try coreAudio.pause()
+        _isPlaying = false
+    }
+    
+    func stop() {
+        try? coreAudio.pause()
+        _isPlaying = false
+        clickTimestamps = []
+    }
+    
+    func setBPM(bpm: Int) {
+        _bpm = bpm
+        coreAudio.setBPM(Double(bpm))
+    }
+    
+    var audioBpm: Int {
+        return _bpm
+    }
+    
+    func setTimeSignature(timeSignature: Int) {
+        _timeSignature = timeSignature
+        // Core Audio implementation doesn't need time signature for basic operation
+        // It's used for accenting beats, which we'll implement later
+    }
+    
+    var audioTimeSignature: Int {
+        return _timeSignature
+    }
+    
+    func setVolume(volume: Float) {
+        _volume = volume
+        // TODO: Implement volume control in CoreAudioMetronome
+    }
+    
+    var getVolume: Float {
+        return _volume
+    }
+    
+    var isPlaying: Bool {
+        return _isPlaying
+    }
+    
+    func enableMicrophone() throws {
+        // Core Audio implementation has mic enabled by default
+        // Nothing to do here
+    }
+    
+    func setMicVolume(_ volume: Float) {
+        _micVolume = volume
+        // TODO: Implement mic volume control in CoreAudioMetronome
+    }
+    
+    func startRecording(path: String) -> Bool {
+        _recordingPath = path
+        recordingStartTime = Date().timeIntervalSince1970
+        clickTimestamps = []
+        
+        do {
+            try coreAudio.startRecording()
+            return true
+        } catch {
+            print("[CoreAudioAdapter] Failed to start recording: \(error)")
+            return false
+        }
+    }
+    
+    func stopRecording() -> [String: Any]? {
+        guard let recordingPath = _recordingPath else { return nil }
+        
+        do {
+            let finalPath = try coreAudio.stopRecording()
+            
+            // Move file to requested path if different
+            if finalPath != recordingPath {
+                let fileManager = FileManager.default
+                try? fileManager.removeItem(atPath: recordingPath)
+                try fileManager.moveItem(atPath: finalPath, toPath: recordingPath)
+            }
+            
+            // Return data structure expected by Flutter
+            return [
+                "path": recordingPath,
+                "timestamps": clickTimestamps,
+                "startTime": recordingStartTime
+            ]
+        } catch {
+            print("[CoreAudioAdapter] Failed to stop recording: \(error)")
+            return nil
+        }
+    }
+    
+    func destroy() {
+        stop()
+        // CoreAudioMetronome cleans itself up in deinit
+    }
+    
+    func setAudioFile(mainFileBytes: Data, accentedFileBytes: Data) {
+        do {
+            try loadClickSoundFromData(mainFileBytes)
+            // TODO: Handle accented clicks
+        } catch {
+            print("[CoreAudioAdapter] Failed to load audio file: \(error)")
+        }
+    }
+    
+    func enableTickCallback(_eventTickSink: EventTickHandler) {
+        self.eventTickHandler = _eventTickSink
+        // TODO: Implement tick callbacks from CoreAudioMetronome
+        // Will need to pass beat events from render callback to Flutter
+    }
+}

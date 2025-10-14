@@ -6,7 +6,13 @@ import FlutterMacOS
 #endif
 public class MetronomePlugin: NSObject, FlutterPlugin {
     var channel:FlutterMethodChannel?
-    var metronome:Metronome?
+    
+    // Feature flag: set to true to use new Core Audio implementation
+    // Set to false to use legacy AVAudioEngine implementation
+    private let useCoreAudio: Bool = false  // TODO: Change to true when ready to test
+    
+    // Polymorphic metronome - can be either implementation
+    var metronome: MetronomeInterface?
     //
     private let eventTickListener: EventTickHandler = EventTickHandler()
     private var eventTick: FlutterEventChannel?
@@ -142,7 +148,45 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
         let bpm: Int = (attributes?["bpm"] as? Int) ?? 120
         let volume: Float = (attributes?["volume"] as? Float) ?? 0.5
         let sampleRate: Int = (attributes?["sampleRate"] as? Int) ?? 44100
-        metronome =  Metronome( mainFileBytes:mainBytes,accentedFileBytes: accentedBytes,bpm:bpm,timeSignature:timeSignature,volume:volume,sampleRate:sampleRate)
+        
+        if useCoreAudio {
+            // Use new Core Audio implementation
+            do {
+                metronome = try CoreAudioMetronomeAdapter(
+                    mainFileBytes: mainBytes,
+                    accentedFileBytes: accentedBytes,
+                    bpm: bpm,
+                    timeSignature: timeSignature,
+                    volume: volume,
+                    sampleRate: sampleRate
+                )
+                print("[MetronomePlugin] Using Core Audio implementation")
+            } catch {
+                print("[MetronomePlugin] Failed to initialize Core Audio metronome: \(error)")
+                print("[MetronomePlugin] Falling back to AVAudioEngine implementation")
+                // Fall back to old implementation
+                metronome = Metronome(
+                    mainFileBytes: mainBytes,
+                    accentedFileBytes: accentedBytes,
+                    bpm: bpm,
+                    timeSignature: timeSignature,
+                    volume: volume,
+                    sampleRate: sampleRate
+                )
+            }
+        } else {
+            // Use legacy AVAudioEngine implementation
+            metronome = Metronome(
+                mainFileBytes: mainBytes,
+                accentedFileBytes: accentedBytes,
+                bpm: bpm,
+                timeSignature: timeSignature,
+                volume: volume,
+                sampleRate: sampleRate
+            )
+            print("[MetronomePlugin] Using AVAudioEngine implementation")
+        }
+        
         if(enableTickCallback){
             metronome?.enableTickCallback(_eventTickSink: eventTickListener);
         }
