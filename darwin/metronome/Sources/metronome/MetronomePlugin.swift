@@ -41,10 +41,10 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                   metronomeInit(attributes: attributes)
                 break;
               case "play":
-                  metronome?.play()
+                  try? metronome?.play()
                 break;
               case "pause":
-                  metronome?.pause()
+                  try? metronome?.pause()
                 break;
               case "stop":
                   metronome?.stop()
@@ -172,7 +172,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                     timeSignature: timeSignature,
                     volume: volume,
                     sampleRate: sampleRate
-                )
+                ) as MetronomeInterface
             }
         } else {
             // Use legacy AVAudioEngine implementation
@@ -183,7 +183,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                 timeSignature: timeSignature,
                 volume: volume,
                 sampleRate: sampleRate
-            )
+            ) as MetronomeInterface
             print("[MetronomePlugin] Using AVAudioEngine implementation")
         }
         
