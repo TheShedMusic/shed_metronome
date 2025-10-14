@@ -112,11 +112,14 @@ class Metronome {
         do {
             let url = URL(fileURLWithPath: path)
             
-            // Create a standard recording format (44.1kHz, stereo)
+            // Use the input node's actual hardware format instead of hardcoded values
+            let inputFormat = inputNode.outputFormat(forBus: 0)
+            
+            // Create recording format matching input hardware
             guard let recordingFormat = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
-                sampleRate: 44100,
-                channels: 2,
+                sampleRate: inputFormat.sampleRate,  // Use hardware sample rate
+                channels: inputFormat.channelCount,   // Use hardware channel count
                 interleaved: false
             ) else {
                 print("[Metronome] Failed to create recording format")
@@ -124,6 +127,7 @@ class Metronome {
             }
             
             print("[Metronome] Starting recording:")
+            print(" Input HW format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
             print(" Recording format: \(recordingFormat.sampleRate)Hz, \(recordingFormat.channelCount) channels")
             print(" Path: \(path)")
             
@@ -135,7 +139,7 @@ class Metronome {
             clickTimeStamps = []
             print("[Metronome] Recording start time captured")
             
-            // Install tap on input node with explicit format
+            // Install tap - format will match now
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, time in
                 guard let self = self, let file = self.audioFileRecording else { return }
                 do {
