@@ -62,10 +62,10 @@ class Metronome {
            
         // Connect all nodes with nil format - let engine figure it out
         audioEngine.connect(audioPlayerNode, to: mixerNode, format: audioFileMain.processingFormat)
-        audioEngine.connect(inputNode!, to: micVolumeNode!, format: nil)
-        audioEngine.connect(micVolumeNode!, to: mixerNode, format: nil)
+        // audioEngine.connect(inputNode!, to: micVolumeNode!, format: nil)
+        // audioEngine.connect(micVolumeNode!, to: mixerNode, format: nil)
         
-        micVolumeNode?.outputVolume = 0.0
+        // micVolumeNode?.outputVolume = 0.0
         
         audioEngine.prepare()
         // Start the audio engine
@@ -118,7 +118,12 @@ class Metronome {
             
             // Install tap on mixer to capture audio
             // Using formate: mil tells it to use the mixer's native format
-            mixerNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, time in
+            guard let inputNode = inputNode else {
+                print("[Metronome] Input node not available")
+                return false
+            }
+            
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, time in
                 guard let self = self, let file = self.audioFileRecording else {return}
                 do {
                     try file.write(from: buffer)
@@ -126,6 +131,7 @@ class Metronome {
                     print("[Metronome] Error writing audio buffer: \(error)")
                 }
             }
+            
             
             isRecording = true
             print("[Metronome] Recording started")
@@ -142,7 +148,7 @@ class Metronome {
             return nil
         }
         
-        mixerNode.removeTap(onBus: 0)
+        inputNode?.removeTap(onBus: 0)
         
         let filePath = audioFileRecording?.url.path
         
