@@ -99,8 +99,8 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               let success = metronome?.startRecording(path: path) ?? false
               result(success)
           case "stopRecording":
-              let result = metronome?.stopRecording()
-              result(result)
+              let recordingResult = metronome?.stopRecording()
+              result(recordingResult)
               default:
                   result("unkown")
                 break;
