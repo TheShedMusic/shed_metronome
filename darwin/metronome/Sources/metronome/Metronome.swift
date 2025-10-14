@@ -213,8 +213,8 @@ class Metronome: MetronomeInterface {
         if audioBpm != bpm {
             audioBpm = bpm
             if isPlaying {
-                pause()
-                play()
+                try? pause()
+                try? play()
             }
         }
     }
@@ -223,8 +223,8 @@ class Metronome: MetronomeInterface {
         if audioTimeSignature != timeSignature {
             audioTimeSignature = timeSignature
             if isPlaying {
-                pause()
-                play()
+                try? pause()
+                try? play()
             }
         }
     }
@@ -238,8 +238,8 @@ class Metronome: MetronomeInterface {
         }
         if !mainFileBytes.isEmpty || !accentedFileBytes.isEmpty {
             if isPlaying {
-                pause()
-                play()
+                try? pause()
+                try? play()
             }
         }
     }
@@ -283,7 +283,7 @@ class Metronome: MetronomeInterface {
 
     private func handleInterruption(_ notification: Notification) {
         if isPlaying {
-            pause()
+            try? pause()
         }
     }
     private func handleRouteChange(_ notification: Notification) {
@@ -292,7 +292,7 @@ class Metronome: MetronomeInterface {
         // print("Audio route changed. Reason: \(String(describing: reason))")
         let wasPlaying = isPlaying
         if wasPlaying {
-            pause()
+            try? pause()
         }
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -311,7 +311,7 @@ class Metronome: MetronomeInterface {
                 }
 
                 if wasPlaying {
-                    self.play()
+                    try? self.play()
                 }
             } catch {
                 print("Failed to handle audio route change: \(error.localizedDescription)")
