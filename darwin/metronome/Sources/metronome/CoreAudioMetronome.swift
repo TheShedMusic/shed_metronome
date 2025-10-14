@@ -282,7 +282,7 @@ class CoreAudioMetronome {
         
         // Set render callback
         var callbackStruct = AURenderCallbackStruct(
-            inputProc: renderCallback,
+            inputProc: coreAudioRenderCallback,
             inputProcRefCon: Unmanaged.passUnretained(self).toOpaque()
         )
         
@@ -420,10 +420,24 @@ class CoreAudioMetronome {
     }
 }
 
-// MARK: - C Callback Bridge
+    // MARK: - Internal Render Method (Accessed by C callback)
+    
+    /// Internal render method called from C callback
+    /// Must be accessible to the C callback function
+    fileprivate func internalRenderCallback(
+        ioData: UnsafeMutablePointer<AudioBufferList>,
+        frameCount: UInt32,
+        timeStamp: UnsafePointer<AudioTimeStamp>
+    ) {
+        renderCallback(ioData: ioData, frameCount: frameCount, timeStamp: timeStamp)
+    }
+}
+
+// MARK: - C Callback Bridge (Must be at file scope)
 
 /// C callback function that bridges to Swift method
-private func renderCallback(
+/// This must be a file-scope function (not inside the class) to work with Core Audio
+private func coreAudioRenderCallback(
     inRefCon: UnsafeMutableRawPointer,
     ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
     inTimeStamp: UnsafePointer<AudioTimeStamp>,
@@ -438,7 +452,7 @@ private func renderCallback(
     let metronome = Unmanaged<CoreAudioMetronome>.fromOpaque(inRefCon).takeUnretainedValue()
     
     // Call the Swift render method
-    metronome.renderCallback(
+    metronome.internalRenderCallback(
         ioData: ioData,
         frameCount: inNumberFrames,
         timeStamp: inTimeStamp

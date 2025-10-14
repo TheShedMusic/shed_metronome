@@ -165,25 +165,27 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                 print("[MetronomePlugin] Failed to initialize Core Audio metronome: \(error)")
                 print("[MetronomePlugin] Falling back to AVAudioEngine implementation")
                 // Fall back to old implementation
-                metronome = Metronome(
+                let legacyMetronome = Metronome(
                     mainFileBytes: mainBytes,
                     accentedFileBytes: accentedBytes,
                     bpm: bpm,
                     timeSignature: timeSignature,
                     volume: volume,
                     sampleRate: sampleRate
-                ) as MetronomeInterface
+                )
+                metronome = legacyMetronome
             }
         } else {
             // Use legacy AVAudioEngine implementation
-            metronome = Metronome(
+            let legacyMetronome = Metronome(
                 mainFileBytes: mainBytes,
                 accentedFileBytes: accentedBytes,
                 bpm: bpm,
                 timeSignature: timeSignature,
                 volume: volume,
                 sampleRate: sampleRate
-            ) as MetronomeInterface
+            )
+            metronome = legacyMetronome
             print("[MetronomePlugin] Using AVAudioEngine implementation")
         }
         

@@ -62,11 +62,10 @@ extension AudioBufferList {
         numberOfBuffers: Int,
         _ body: (UnsafeBufferPointer<AudioBuffer>) -> T
     ) -> T {
-        let buffers = UnsafeBufferPointer(
-            start: &bufferList.pointee.mBuffers,
-            count: numberOfBuffers
-        )
-        return body(buffers)
+        return withUnsafePointer(to: bufferList.pointee.mBuffers) { buffersPtr in
+            let buffers = UnsafeBufferPointer(start: buffersPtr, count: numberOfBuffers)
+            return body(buffers)
+        }
     }
 }
 
@@ -113,12 +112,12 @@ enum CoreAudioError: Error, CustomStringConvertible {
     
     private func statusString(_ status: OSStatus) -> String {
         switch status {
-        case kAudioSessionNotInitialized: return "Audio session not initialized"
-        case kAudioSessionAlreadyInitialized: return "Audio session already initialized"
-        case kAudioSessionInitializationError: return "Audio session initialization error"
-        case kAudioSessionUnsupportedPropertyError: return "Unsupported property"
-        case kAudioSessionBadPropertySizeError: return "Bad property size"
-        case kAudioSessionNotActiveError: return "Audio session not active"
+        case OSStatus(kAudioSessionNotInitialized): return "Audio session not initialized"
+        case OSStatus(kAudioSessionAlreadyInitialized): return "Audio session already initialized"
+        case OSStatus(kAudioSessionInitializationError): return "Audio session initialization error"
+        case OSStatus(kAudioSessionUnsupportedPropertyError): return "Unsupported property"
+        case OSStatus(kAudioSessionBadPropertySizeError): return "Bad property size"
+        case OSStatus(kAudioSessionNotActiveError): return "Audio session not active"
         case kAudioUnitErr_InvalidProperty: return "Invalid audio unit property"
         case kAudioUnitErr_InvalidParameter: return "Invalid audio unit parameter"
         case kAudioUnitErr_NoConnection: return "No audio unit connection"
