@@ -9,7 +9,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
     
     // Feature flag: set to true to use new Core Audio implementation
     // Set to false to use legacy AVAudioEngine implementation
-    private let useCoreAudio: Bool = false  // TODO: Change to true when ready to test
+    private let useCoreAudio: Bool = true  // TODO: Change to true when ready to test
     
     // Polymorphic metronome - can be either implementation
     var metronome: MetronomeInterface?
