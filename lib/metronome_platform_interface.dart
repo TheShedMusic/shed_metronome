@@ -99,7 +99,7 @@ abstract class MetronomePlatform extends PlatformInterface {
     throw UnimplementedError('startRecording() has not been implemented.');
   }
 
-  Future<String?> stopRecording() {
+  Future<Map<String, dynamic>?> stopRecording() {
     throw UnimplementedError('stopRecording() has not been implemented.');
   }
 

@@ -280,9 +280,10 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
-  Future<String?> stopRecording() async {
+  Future<Map<String, dynamic>?> stopRecording() async {
     try {
-      return await methodChannel.invokeMethod<String>('stopRecording');
+      final result = await methodChannel.invokeMethod<Map>('stopRecording');
+      return result?.cast<String, dynamic>();
     } catch (e) {
       if (kDebugMode) {
         print(e);

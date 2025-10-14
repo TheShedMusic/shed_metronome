@@ -151,7 +151,7 @@ class Metronome {
   }
 
   ///stop recording and finalize audio file
-  Future<String?> stopRecording() async {
+  Future<Map<String, dynamic>?> stopRecording() async {
     try {
       final result = await MetronomePlatform.instance.stopRecording();
       return result;
