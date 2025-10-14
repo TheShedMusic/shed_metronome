@@ -418,8 +418,7 @@ class CoreAudioMetronome {
             samplePos += 1
         }
     }
-}
-
+    
     // MARK: - Internal Render Method (Accessed by C callback)
     
     /// Internal render method called from C callback
