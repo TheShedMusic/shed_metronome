@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'dart:typed_data';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'metronome_method_channel.dart';
