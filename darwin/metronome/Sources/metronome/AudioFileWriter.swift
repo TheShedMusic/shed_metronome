@@ -113,7 +113,7 @@ class AudioFileWriter {
         var audioFile: ExtAudioFileRef?
         let status = ExtAudioFileCreateWithURL(
             fileURL as CFURL,
-            kAudioFileCAFFile,  // CAF format supports our format perfectly
+            kAudioFileCAFType,  // CAF format supports our format perfectly
             &outputFormat,
             nil,  // No channel layout
             AudioFileFlags.eraseFile.rawValue,
@@ -121,7 +121,7 @@ class AudioFileWriter {
         )
         
         guard status == noErr, let file = audioFile else {
-            throw CoreAudioError.fileOperationFailed("Failed to create audio file: \(status)")
+            throw CoreAudioError.osStatus(status, "Failed to create audio file")
         }
         
         self.extAudioFile = file
@@ -145,19 +145,11 @@ class AudioFileWriter {
     private func writeLoop() {
         while isWriting {
             // Read a chunk from circular buffer
-            let samplesToRead = min(tempBuffer.count, circularBuffer.availableToRead)
+            let samplesToRead = min(tempBuffer.count, circularBuffer.availableToRead())
             
             if samplesToRead > 0 {
                 // Read samples from circular buffer
-                var readCount = 0
-                for i in 0..<samplesToRead {
-                    if let sample = circularBuffer.read() {
-                        tempBuffer[i] = sample
-                        readCount += 1
-                    } else {
-                        break
-                    }
-                }
+                let readCount = circularBuffer.read(into: &tempBuffer, maxCount: samplesToRead)
                 
                 if readCount > 0 {
                     // Write to file
@@ -172,18 +164,10 @@ class AudioFileWriter {
     
     private func flushRemainingData() {
         // Read everything remaining in the buffer
-        while circularBuffer.availableToRead > 0 {
-            let samplesToRead = min(tempBuffer.count, circularBuffer.availableToRead)
+        while circularBuffer.availableToRead() > 0 {
+            let samplesToRead = min(tempBuffer.count, circularBuffer.availableToRead())
             
-            var readCount = 0
-            for i in 0..<samplesToRead {
-                if let sample = circularBuffer.read() {
-                    tempBuffer[i] = sample
-                    readCount += 1
-                } else {
-                    break
-                }
-            }
+            let readCount = circularBuffer.read(into: &tempBuffer, maxCount: samplesToRead)
             
             if readCount > 0 {
                 writeToFile(samples: tempBuffer, count: readCount)
@@ -202,23 +186,6 @@ class AudioFileWriter {
         
         guard frameCount > 0 else { return }
         
-        // Create AudioBufferList for ExtAudioFile
-        var bufferList = AudioBufferList(
-            mNumberBuffers: 2,  // Stereo
-            mBuffers: (
-                AudioBuffer(
-                    mNumberChannels: 1,
-                    mDataByteSize: UInt32(frameCount * MemoryLayout<Float>.size),
-                    mData: nil
-                ),
-                AudioBuffer(
-                    mNumberChannels: 1,
-                    mDataByteSize: UInt32(frameCount * MemoryLayout<Float>.size),
-                    mData: nil
-                )
-            )
-        )
-        
         // Allocate temporary deinterleaved buffers
         var leftChannel = [Float](repeating: 0, count: frameCount)
         var rightChannel = [Float](repeating: 0, count: frameCount)
@@ -229,17 +196,37 @@ class AudioFileWriter {
             rightChannel[i] = samples[i * 2 + 1]
         }
         
+        // Create AudioBufferList
+        let bufferListSize = MemoryLayout<AudioBufferList>.size + MemoryLayout<AudioBuffer>.size
+        let bufferListPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: bufferListSize,
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { bufferListPointer.deallocate() }
+        
+        let bufferList = bufferListPointer.bindMemory(to: AudioBufferList.self, capacity: 1)
+        let buffers = UnsafeMutableAudioBufferListPointer(bufferList)
+        
         // Set buffer pointers
         leftChannel.withUnsafeMutableBufferPointer { leftPtr in
             rightChannel.withUnsafeMutableBufferPointer { rightPtr in
-                bufferList.mBuffers.0.mData = UnsafeMutableRawPointer(leftPtr.baseAddress)
-                bufferList.mBuffers.1.mData = UnsafeMutableRawPointer(rightPtr.baseAddress)
+                buffers.count = 2
+                buffers[0] = AudioBuffer(
+                    mNumberChannels: 1,
+                    mDataByteSize: UInt32(frameCount * MemoryLayout<Float>.size),
+                    mData: UnsafeMutableRawPointer(leftPtr.baseAddress)
+                )
+                buffers[1] = AudioBuffer(
+                    mNumberChannels: 1,
+                    mDataByteSize: UInt32(frameCount * MemoryLayout<Float>.size),
+                    mData: UnsafeMutableRawPointer(rightPtr.baseAddress)
+                )
                 
                 // Write to file
                 let status = ExtAudioFileWrite(
                     file,
                     UInt32(frameCount),
-                    &bufferList
+                    bufferList
                 )
                 
                 if status != noErr {
