@@ -51,6 +51,9 @@ class CoreAudioMetronome {
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
     
+    /// File writer instance
+    private var fileWriter: AudioFileWriter?
+    
     /// File writer background queue
     private let fileWriterQueue = DispatchQueue(
         label: "com.grooveshed.filewriter",
@@ -142,7 +145,20 @@ class CoreAudioMetronome {
         
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
-        audioBuffer = CircularBuffer<Float>(capacity: bufferSize)
+        let buffer = CircularBuffer<Float>(capacity: bufferSize)
+        audioBuffer = buffer
+        
+        // Create file writer
+        let writer = try AudioFileWriter(
+            circularBuffer: buffer,
+            filePath: path,
+            format: audioFormat,
+            writerQueue: fileWriterQueue
+        )
+        fileWriter = writer
+        
+        // Start the file writer thread
+        writer.start()
         
         isRecording = true
         recordingStartSample = currentSamplePosition
@@ -157,14 +173,17 @@ class CoreAudioMetronome {
             throw CoreAudioError.invalidState("No recording path set")
         }
         
+        // Stop recording flag first (stops writing to circular buffer)
         isRecording = false
         
-        // TODO: Phase 5 - Implement actual recording to file
-        // For now, create an empty file so the app doesn't crash
-        let fileURL = URL(fileURLWithPath: path)
-        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Stop the file writer (this will flush remaining data and close the file)
+        fileWriter?.stop()
+        fileWriter = nil
         
-        os_log("Recording stopped (not yet implemented - Phase 5)", log: logger, type: .info)
+        // Clear circular buffer
+        audioBuffer = nil
+        
+        os_log("Recording stopped and saved to: %@", log: logger, type: .info, path)
         
         return path
     }
@@ -559,6 +578,17 @@ class CoreAudioMetronome {
             for i in 0..<Int(frameCount) {
                 left[i] += micL[i]
                 right[i] += micR[i]
+            }
+            
+            // Write mixed audio to circular buffer for file writing
+            // Interleave stereo samples: L, R, L, R, L, R...
+            if let buffer = audioBuffer {
+                for i in 0..<Int(frameCount) {
+                    // Write left channel
+                    _ = buffer.write(left[i])
+                    // Write right channel
+                    _ = buffer.write(right[i])
+                }
             }
         }
         
