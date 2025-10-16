@@ -26,21 +26,32 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         self._timeSignature = timeSignature
         self._volume = volume
         
-        // Load click sound from main file bytes
-        // TODO: Handle accented clicks
-        try loadClickSoundFromData(mainFileBytes)
+        // Load main click sound
+        try loadClickSoundFromData(mainFileBytes, isAccented: false)
         
+        // Load accented click sound if provided
+        if !accentedFileBytes.isEmpty {
+            try loadClickSoundFromData(accentedFileBytes, isAccented: true)
+        }
+        
+        // Set time signature
+        coreAudio.setTimeSignature(timeSignature)
         coreAudio.setBPM(Double(bpm))
     }
     
-    private func loadClickSoundFromData(_ data: Data) throws {
+    private func loadClickSoundFromData(_ data: Data, isAccented: Bool) throws {
         // Write to temporary file
         let tempDir = FileManager.default.temporaryDirectory
-        let tempFile = tempDir.appendingPathComponent("click_temp.wav")
+        let filename = isAccented ? "click_accented_temp.wav" : "click_temp.wav"
+        let tempFile = tempDir.appendingPathComponent(filename)
         try data.write(to: tempFile)
         
         // Load into Core Audio metronome
-        try coreAudio.loadClickSound(from: tempFile)
+        if isAccented {
+            try coreAudio.loadAccentedClickSound(from: tempFile)
+        } else {
+            try coreAudio.loadClickSound(from: tempFile)
+        }
         
         // Clean up temp file
         try? FileManager.default.removeItem(at: tempFile)
@@ -78,8 +89,7 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     
     func setTimeSignature(timeSignature: Int) {
         _timeSignature = timeSignature
-        // Core Audio implementation doesn't need time signature for basic operation
-        // It's used for accenting beats, which we'll implement later
+        coreAudio.setTimeSignature(timeSignature)
     }
     
     var audioTimeSignature: Int {
@@ -115,7 +125,7 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         clickTimestamps = []
         
         do {
-            try coreAudio.startRecording()
+            try coreAudio.startRecording(path: path)
             return true
         } catch {
             print("[CoreAudioAdapter] Failed to start recording: \(error)")
@@ -155,8 +165,10 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     
     func setAudioFile(mainFileBytes: Data, accentedFileBytes: Data) {
         do {
-            try loadClickSoundFromData(mainFileBytes)
-            // TODO: Handle accented clicks
+            try loadClickSoundFromData(mainFileBytes, isAccented: false)
+            if !accentedFileBytes.isEmpty {
+                try loadClickSoundFromData(accentedFileBytes, isAccented: true)
+            }
         } catch {
             print("[CoreAudioAdapter] Failed to load audio file: \(error)")
         }
@@ -164,7 +176,11 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     
     func enableTickCallback(_eventTickSink: EventTickHandler) {
         self.eventTickHandler = _eventTickSink
-        // TODO: Implement tick callbacks from CoreAudioMetronome
-        // Will need to pass beat events from render callback to Flutter
+        
+        // Set up beat callback to forward to Flutter
+        coreAudio.setBeatCallback { [weak self] tick in
+            guard let self = self, let handler = self.eventTickHandler else { return }
+            handler.send(res: tick)
+        }
     }
 }

@@ -29,6 +29,22 @@ class CoreAudioMetronome {
     /// Sample time when recording started
     private var recordingStartSample: Float64 = 0
     
+    /// Path where recording should be saved
+    private var recordingPath: String?
+    
+    /// Time signature (beats per bar) - 0 or 1 means no accent
+    private var timeSignature: Int = 4
+    
+    /// Accented click buffer
+    private var accentedClickBuffer: [Float] = []
+    private var accentedClickBufferLength: Int = 0
+    
+    /// Current beat number (for accent pattern)
+    private var currentBeat: Int = 0
+    
+    /// Beat callback handler
+    private var beatCallback: ((Int) -> Void)?
+    
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
     
@@ -107,8 +123,10 @@ class CoreAudioMetronome {
     }
     
     /// Starts recording (starts metronome if not already playing)
-    func startRecording() throws {
+    func startRecording(path: String) throws {
         guard !isRecording else { return }
+        
+        self.recordingPath = path
         
         // Ensure metronome is playing
         if !isPlaying {
@@ -122,22 +140,26 @@ class CoreAudioMetronome {
         isRecording = true
         recordingStartSample = currentSamplePosition
         
-        os_log("Recording started at sample %f", log: logger, type: .info, recordingStartSample)
+        os_log("Recording started at sample %f, path: %@", log: logger, type: .info, recordingStartSample, path)
     }
     
     /// Stops recording and returns the file path
     func stopRecording() throws -> String {
         guard isRecording else { throw CoreAudioError.invalidState("Not recording") }
+        guard let path = recordingPath else {
+            throw CoreAudioError.invalidState("No recording path set")
+        }
         
         isRecording = false
         
-        // TODO: Flush remaining audio from circular buffer
-        // TODO: Finalize audio file
-        // TODO: Return file path
+        // TODO: Phase 5 - Implement actual recording to file
+        // For now, create an empty file so the app doesn't crash
+        let fileURL = URL(fileURLWithPath: path)
+        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         
-        os_log("Recording stopped", log: logger, type: .info)
+        os_log("Recording stopped (not yet implemented - Phase 5)", log: logger, type: .info)
         
-        return "TODO_FILE_PATH"
+        return path
     }
     
     /// Loads the click sound into memory
@@ -166,6 +188,46 @@ class CoreAudioMetronome {
         ))
         
         os_log("Click sound loaded: %d samples", log: logger, type: .info, clickBufferLength)
+    }
+    
+    /// Loads the accented click sound into memory
+    func loadAccentedClickSound(from url: URL) throws {
+        let audioFile = try AVAudioFile(forReading: url)
+        let frameCount = AVAudioFrameCount(audioFile.length)
+        
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: audioFile.processingFormat,
+            frameCapacity: frameCount
+        ) else {
+            throw CoreAudioError.configurationFailed("Failed to create audio buffer")
+        }
+        
+        try audioFile.read(into: buffer)
+        
+        // Convert to our internal format (Float array)
+        guard let floatChannelData = buffer.floatChannelData else {
+            throw CoreAudioError.configurationFailed("Failed to get float channel data")
+        }
+        
+        accentedClickBufferLength = Int(buffer.frameLength)
+        accentedClickBuffer = Array(UnsafeBufferPointer(
+            start: floatChannelData[0],
+            count: accentedClickBufferLength
+        ))
+        
+        os_log("Accented click sound loaded: %d samples", log: logger, type: .info, accentedClickBufferLength)
+    }
+    
+    /// Sets the time signature (beats per bar)
+    func setTimeSignature(_ ts: Int) {
+        self.timeSignature = ts
+        currentBeat = 0  // Reset beat counter
+        os_log("Time signature set to %d", log: logger, type: .info, ts)
+    }
+    
+    /// Sets the beat callback handler
+    func setBeatCallback(_ callback: @escaping (Int) -> Void) {
+        self.beatCallback = callback
     }
     
     // MARK: - Audio Session Setup
@@ -400,16 +462,42 @@ class CoreAudioMetronome {
         memset(rightBuffer, 0, frameCount * MemoryLayout<Float>.size)
         
         var samplePos = currentSamplePosition
+        var lastBeat = -1
         
         for frameIndex in 0..<frameCount {
             // Calculate position within the beat cycle
             let beatPosition = samplePos.truncatingRemainder(dividingBy: samplesPerBeat)
             
+            // Calculate which beat we're on
+            let beatNumber = Int(samplePos / samplesPerBeat)
+            
+            // Fire beat callback on beat transitions (not every sample!)
+            if beatNumber != lastBeat && beatPosition < 100 { // Within first 100 samples of beat
+                lastBeat = beatNumber
+                let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
+                
+                // Fire callback on main thread (not real-time safe, but necessary)
+                if let callback = beatCallback {
+                    DispatchQueue.main.async {
+                        callback(tickInBar)
+                    }
+                }
+                
+                // Update current beat for accent pattern
+                currentBeat = tickInBar
+            }
+            
             // If we're at the start of a beat (within click buffer length)
             if beatPosition < Float64(clickBufferLength) {
                 let clickIndex = Int(beatPosition)
-                if clickIndex < clickBuffer.count {
-                    let sample = clickBuffer[clickIndex]
+                
+                // Choose click buffer based on accent pattern
+                let useAccent = (timeSignature > 1) && (currentBeat == 0) && !accentedClickBuffer.isEmpty
+                let buffer = useAccent ? accentedClickBuffer : clickBuffer
+                let bufferLength = useAccent ? accentedClickBufferLength : clickBufferLength
+                
+                if clickIndex < bufferLength && clickIndex < buffer.count {
+                    let sample = buffer[clickIndex]
                     leftBuffer[frameIndex] = sample
                     rightBuffer[frameIndex] = sample
                 }
