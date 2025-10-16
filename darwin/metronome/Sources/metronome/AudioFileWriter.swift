@@ -116,17 +116,28 @@ class AudioFileWriter {
         // Delete existing file if present
         try? FileManager.default.removeItem(at: fileURL)
         
-        // Define output format (same as our internal format)
-        var outputFormat = format
+        // Define file format - standard PCM format that CAF supports
+        // We'll convert our non-interleaved format to this
+        var fileFormat = AudioStreamBasicDescription(
+            mSampleRate: format.mSampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: UInt32(MemoryLayout<Float>.size * 2),  // Stereo interleaved
+            mFramesPerPacket: 1,
+            mBytesPerFrame: UInt32(MemoryLayout<Float>.size * 2),   // Stereo interleaved
+            mChannelsPerFrame: 2,
+            mBitsPerChannel: 32,
+            mReserved: 0
+        )
         
-        os_log("Calling ExtAudioFileCreateWithURL...", log: logger, type: .info)
+        os_log("Calling ExtAudioFileCreateWithURL with interleaved format...", log: logger, type: .info)
         
-        // Create the ExtAudioFile
+        // Create the ExtAudioFile with interleaved format
         var audioFile: ExtAudioFileRef?
-        let status = ExtAudioFileCreateWithURL(
+        var status = ExtAudioFileCreateWithURL(
             fileURL as CFURL,
-            kAudioFileCAFType,  // CAF format supports our format perfectly
-            &outputFormat,
+            kAudioFileCAFType,
+            &fileFormat,
             nil,  // No channel layout
             AudioFileFlags.eraseFile.rawValue,
             &audioFile
@@ -138,6 +149,23 @@ class AudioFileWriter {
             os_log("Failed to create ExtAudioFile, status: %d", log: logger, type: .error, status)
             throw CoreAudioError.osStatus(status, "Failed to create audio file")
         }
+        
+        // Set the client format to non-interleaved (what we'll provide)
+        var clientFormat = format
+        status = ExtAudioFileSetProperty(
+            file,
+            kExtAudioFileProperty_ClientDataFormat,
+            UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
+            &clientFormat
+        )
+        
+        if status != noErr {
+            ExtAudioFileDispose(file)
+            os_log("Failed to set client format, status: %d", log: logger, type: .error, status)
+            throw CoreAudioError.osStatus(status, "Failed to set client data format")
+        }
+        
+        os_log("ExtAudioFile configured successfully", log: logger, type: .info)
         
         self.extAudioFile = file
         
