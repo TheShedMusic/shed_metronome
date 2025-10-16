@@ -136,34 +136,49 @@ class CoreAudioMetronome {
     func startRecording(path: String) throws {
         guard !isRecording else { return }
         
+        os_log("startRecording() called with path: %@", log: logger, type: .info, path)
+        
         self.recordingPath = path
         
         // Ensure metronome is playing
         if !isPlaying {
+            os_log("Metronome not playing, starting it...", log: logger, type: .info)
             try play()
         }
         
+        // Set recording flag FIRST so mic input works
+        isRecording = true
+        recordingStartSample = currentSamplePosition
+        
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
+        os_log("Allocating circular buffer: %d samples", log: logger, type: .info, bufferSize)
         let buffer = CircularBuffer<Float>(capacity: bufferSize)
         audioBuffer = buffer
         
         // Create file writer
-        let writer = try AudioFileWriter(
-            circularBuffer: buffer,
-            filePath: path,
-            format: audioFormat,
-            writerQueue: fileWriterQueue
-        )
-        fileWriter = writer
-        
-        // Start the file writer thread
-        writer.start()
-        
-        isRecording = true
-        recordingStartSample = currentSamplePosition
-        
-        os_log("Recording started at sample %f, path: %@", log: logger, type: .info, recordingStartSample, path)
+        os_log("Creating AudioFileWriter...", log: logger, type: .info)
+        do {
+            let writer = try AudioFileWriter(
+                circularBuffer: buffer,
+                filePath: path,
+                format: audioFormat,
+                writerQueue: fileWriterQueue
+            )
+            fileWriter = writer
+            
+            // Start the file writer thread
+            os_log("Starting file writer thread...", log: logger, type: .info)
+            writer.start()
+            
+            os_log("Recording started successfully at sample %f, path: %@", log: logger, type: .info, recordingStartSample, path)
+        } catch {
+            // If file writer creation fails, revert recording state
+            isRecording = false
+            audioBuffer = nil
+            os_log("Failed to create file writer: %@", log: logger, type: .error, error.localizedDescription)
+            throw error
+        }
     }
     
     /// Stops recording and returns the file path

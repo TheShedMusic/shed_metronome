@@ -97,17 +97,29 @@ class AudioFileWriter {
     private func createAudioFile() throws {
         let fileURL = URL(fileURLWithPath: filePath)
         
+        os_log("Creating audio file at: %@", log: logger, type: .info, filePath)
+        os_log("Format: %f Hz, %d channels, %d bits", log: logger, type: .info, 
+               format.mSampleRate, format.mChannelsPerFrame, format.mBitsPerChannel)
+        
         // Create directory if needed
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            os_log("Directory created/verified", log: logger, type: .info)
+        } catch {
+            os_log("Failed to create directory: %@", log: logger, type: .error, error.localizedDescription)
+            throw error
+        }
         
         // Delete existing file if present
         try? FileManager.default.removeItem(at: fileURL)
         
         // Define output format (same as our internal format)
         var outputFormat = format
+        
+        os_log("Calling ExtAudioFileCreateWithURL...", log: logger, type: .info)
         
         // Create the ExtAudioFile
         var audioFile: ExtAudioFileRef?
@@ -120,13 +132,16 @@ class AudioFileWriter {
             &audioFile
         )
         
+        os_log("ExtAudioFileCreateWithURL returned status: %d", log: logger, type: .info, status)
+        
         guard status == noErr, let file = audioFile else {
+            os_log("Failed to create ExtAudioFile, status: %d", log: logger, type: .error, status)
             throw CoreAudioError.osStatus(status, "Failed to create audio file")
         }
         
         self.extAudioFile = file
         
-        os_log("Audio file created: %@", log: logger, type: .info, filePath)
+        os_log("Audio file created successfully: %@", log: logger, type: .info, filePath)
     }
     
     private func closeAudioFile() {
