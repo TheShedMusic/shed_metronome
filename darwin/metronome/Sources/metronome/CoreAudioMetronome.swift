@@ -42,6 +42,9 @@ class CoreAudioMetronome {
     /// Current beat number (for accent pattern)
     private var currentBeat: Int = 0
     
+    /// Last beat number for which we fired a callback (to avoid duplicates)
+    private var lastBeatFired: Int = -1
+    
     /// Beat callback handler
     private var beatCallback: ((Int) -> Void)?
     
@@ -462,7 +465,6 @@ class CoreAudioMetronome {
         memset(rightBuffer, 0, frameCount * MemoryLayout<Float>.size)
         
         var samplePos = currentSamplePosition
-        var lastBeat = -1
         
         for frameIndex in 0..<frameCount {
             // Calculate position within the beat cycle
@@ -472,8 +474,8 @@ class CoreAudioMetronome {
             let beatNumber = Int(samplePos / samplesPerBeat)
             
             // Fire beat callback on beat transitions (not every sample!)
-            if beatNumber != lastBeat && beatPosition < 100 { // Within first 100 samples of beat
-                lastBeat = beatNumber
+            if beatNumber != lastBeatFired && beatPosition < 100 { // Within first 100 samples of beat
+                lastBeatFired = beatNumber
                 let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
                 
                 // Fire callback on main thread (not real-time safe, but necessary)
