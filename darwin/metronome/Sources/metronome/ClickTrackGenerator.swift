@@ -1,3 +1,16 @@
+// ============================================================================
+// DEPRECATED: This file is no longer used with Core Audio implementation.
+//
+// Click generation now happens in real-time during recording in the
+// render callback, not as a post-processing step.
+//
+// This file is only kept for:
+// - Backwards compatibility with AVAudioEngine (useCoreAudio = false)
+// - Legacy recordings that need click track regeneration
+//
+// TODO: Remove after Phase 6 validation when Core Audio is proven stable.
+// ============================================================================
+
 import AVFoundation
 
 class ClickTrackGenerator {

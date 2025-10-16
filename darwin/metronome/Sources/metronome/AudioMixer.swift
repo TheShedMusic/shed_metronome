@@ -1,3 +1,14 @@
+// ============================================================================
+// DEPRECATED: This file is no longer used with Core Audio implementation.
+// 
+// Core Audio mixes audio in real-time during recording (sample-accurate).
+// This post-recording mixing approach is only kept for:
+// - Backwards compatibility with AVAudioEngine (useCoreAudio = false)
+// - Legacy recordings that need remixing
+//
+// TODO: Remove after Phase 6 validation when Core Audio is proven stable.
+// ============================================================================
+
 import AVFoundation
 
 class AudioMixer {
