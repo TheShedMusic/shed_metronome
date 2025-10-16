@@ -494,7 +494,7 @@ class CoreAudioMetronome {
         var micRight: UnsafeMutablePointer<Float>?
         
         if isRecording, let audioUnit = ioUnit, let inputBufferStorage = inputBufferListStorage {
-            var flags = AudioUnitRenderActionFlags(0)
+            var flags = AudioUnitRenderActionFlags(rawValue: 0)
             
             // Update buffer sizes for this render cycle
             if let bufferList = inputBufferList {
