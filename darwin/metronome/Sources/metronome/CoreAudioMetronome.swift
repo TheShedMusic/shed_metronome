@@ -387,14 +387,26 @@ class CoreAudioMetronome {
         let channelCount = 2
         let bufferSize = 4096  // Max buffer size we might encounter
         
-        // Allocate the buffer list structure
+        // Calculate required size for AudioBufferList with multiple buffers
         let bufferListSize = MemoryLayout<AudioBufferList>.size + 
                             (channelCount - 1) * MemoryLayout<AudioBuffer>.size
-        let storage = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        inputBufferListStorage = storage
         
-        // Create typed pointer
-        let bufferList = UnsafeMutableAudioBufferListPointer(storage)
+        // Allocate raw memory for the buffer list
+        let storage = UnsafeMutableRawPointer.allocate(
+            byteCount: bufferListSize,
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        
+        // Bind memory to AudioBufferList type
+        let bufferListPointer = storage.bindMemory(
+            to: AudioBufferList.self,
+            capacity: 1
+        )
+        
+        inputBufferListStorage = bufferListPointer
+        
+        // Create typed pointer for easier access
+        let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPointer)
         inputBufferList = bufferList
         
         // Set up each buffer
@@ -448,12 +460,19 @@ class CoreAudioMetronome {
         if let bufferList = inputBufferList {
             for i in 0..<bufferList.count {
                 if let data = bufferList[i].mData {
-                    data.deallocate()
+                    // Deallocate the Float buffer
+                    let floatBuffer = data.assumingMemoryBound(to: Float.self)
+                    floatBuffer.deallocate()
                 }
             }
         }
         if let storage = inputBufferListStorage {
-            storage.deallocate()
+            // Calculate the size we allocated
+            let channelCount = 2
+            let bufferListSize = MemoryLayout<AudioBufferList>.size + 
+                                (channelCount - 1) * MemoryLayout<AudioBuffer>.size
+            // Deallocate as raw pointer
+            UnsafeMutableRawPointer(storage).deallocate()
         }
         inputBufferList = nil
         inputBufferListStorage = nil
