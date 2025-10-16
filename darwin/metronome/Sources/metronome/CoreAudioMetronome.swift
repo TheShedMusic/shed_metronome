@@ -57,6 +57,10 @@ class CoreAudioMetronome {
         qos: .userInitiated
     )
     
+    /// Input buffer for pulling mic samples (allocated once, reused)
+    private var inputBufferList: UnsafeMutableAudioBufferListPointer?
+    private var inputBufferListStorage: UnsafeMutablePointer<AudioBufferList>?
+    
     /// Logger for debugging
     private let logger = OSLog(subsystem: "com.grooveshed.metronome", category: "CoreAudio")
     
@@ -369,7 +373,42 @@ class CoreAudioMetronome {
             "Failed to initialize Audio Unit"
         )
         
+        // Allocate input buffer for pulling mic samples
+        // We'll reuse this buffer in every render callback for efficiency
+        setupInputBuffer()
+        
         os_log("Audio Unit created and configured", log: logger, type: .info)
+    }
+    
+    /// Allocates buffer for pulling mic input in render callback
+    /// This buffer is reused every render cycle for efficiency
+    private func setupInputBuffer() {
+        // Mic input is typically mono, but we'll allocate for stereo just in case
+        let channelCount = 2
+        let bufferSize = 4096  // Max buffer size we might encounter
+        
+        // Allocate the buffer list structure
+        let bufferListSize = MemoryLayout<AudioBufferList>.size + 
+                            (channelCount - 1) * MemoryLayout<AudioBuffer>.size
+        let storage = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
+        inputBufferListStorage = storage
+        
+        // Create typed pointer
+        let bufferList = UnsafeMutableAudioBufferListPointer(storage)
+        inputBufferList = bufferList
+        
+        // Set up each buffer
+        bufferList.count = channelCount
+        for i in 0..<channelCount {
+            let data = UnsafeMutablePointer<Float>.allocate(capacity: bufferSize)
+            bufferList[i] = AudioBuffer(
+                mNumberChannels: 1,
+                mDataByteSize: UInt32(bufferSize * MemoryLayout<Float>.size),
+                mData: UnsafeMutableRawPointer(data)
+            )
+        }
+        
+        os_log("Input buffer allocated for %d channels", log: logger, type: .info, channelCount)
     }
     
     // MARK: - Audio Unit Control
@@ -405,6 +444,20 @@ class CoreAudioMetronome {
             self.ioUnit = nil
         }
         
+        // Deallocate input buffers
+        if let bufferList = inputBufferList {
+            for i in 0..<bufferList.count {
+                if let data = bufferList[i].mData {
+                    data.deallocate()
+                }
+            }
+        }
+        if let storage = inputBufferListStorage {
+            storage.deallocate()
+        }
+        inputBufferList = nil
+        inputBufferListStorage = nil
+        
         try? AVAudioSession.sharedInstance().setActive(false)
         
         os_log("CoreAudioMetronome shut down", log: logger, type: .info)
@@ -426,15 +479,48 @@ class CoreAudioMetronome {
         frameCount: UInt32,
         timeStamp: UnsafePointer<AudioTimeStamp>
     ) {
-        let bufferList = UnsafeMutableAudioBufferListPointer(ioData)
+        let outputBuffers = UnsafeMutableAudioBufferListPointer(ioData)
         
         // Get output buffers (assuming stereo)
-        guard bufferList.count >= 2 else { return }
+        guard outputBuffers.count >= 2 else { return }
         
-        let leftChannel = bufferList[0].mData?.assumingMemoryBound(to: Float.self)
-        let rightChannel = bufferList[1].mData?.assumingMemoryBound(to: Float.self)
+        let leftChannel = outputBuffers[0].mData?.assumingMemoryBound(to: Float.self)
+        let rightChannel = outputBuffers[1].mData?.assumingMemoryBound(to: Float.self)
         
         guard let left = leftChannel, let right = rightChannel else { return }
+        
+        // Pull mic input samples from the audio unit
+        var micLeft: UnsafeMutablePointer<Float>?
+        var micRight: UnsafeMutablePointer<Float>?
+        
+        if isRecording, let audioUnit = ioUnit, let inputBufferStorage = inputBufferListStorage {
+            var flags: AudioUnitRenderActionFlags = 0
+            
+            // Update buffer sizes for this render cycle
+            if let bufferList = inputBufferList {
+                for i in 0..<bufferList.count {
+                    bufferList[i].mDataByteSize = frameCount * UInt32(MemoryLayout<Float>.size)
+                }
+            }
+            
+            // Pull mic samples from input bus (bus 1)
+            let status = AudioUnitRender(
+                audioUnit,
+                &flags,
+                timeStamp,
+                1,  // Input bus
+                frameCount,
+                inputBufferStorage
+            )
+            
+            if status == noErr, let bufferList = inputBufferList {
+                // Mic input is typically mono (channel 0)
+                micLeft = bufferList[0].mData?.assumingMemoryBound(to: Float.self)
+                // If stereo mic, use channel 1, otherwise duplicate mono
+                micRight = bufferList.count > 1 ? 
+                    bufferList[1].mData?.assumingMemoryBound(to: Float.self) : micLeft
+            }
+        }
         
         // Generate clicks if playing
         if isPlaying && !clickBuffer.isEmpty {
@@ -447,6 +533,14 @@ class CoreAudioMetronome {
             // Silence if not playing
             memset(left, 0, Int(frameCount) * MemoryLayout<Float>.size)
             memset(right, 0, Int(frameCount) * MemoryLayout<Float>.size)
+        }
+        
+        // Mix in mic audio if recording
+        if isRecording, let micL = micLeft, let micR = micRight {
+            for i in 0..<Int(frameCount) {
+                left[i] += micL[i]
+                right[i] += micR[i]
+            }
         }
         
         // Update position
