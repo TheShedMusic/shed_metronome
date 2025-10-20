@@ -48,6 +48,9 @@ class CoreAudioMetronome {
     /// Beat callback handler
     private var beatCallback: ((Int) -> Void)?
     
+    /// Microphone input volume (0.0 to 1.0)
+    private var micVolume: Float = 1.0
+    
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
     
@@ -130,6 +133,12 @@ class CoreAudioMetronome {
         self.bpm = newBPM
         updateSamplesPerBeat()
         os_log("BPM set to %f", log: logger, type: .info, newBPM)
+    }
+    
+    /// Sets the microphone input volume
+    func setMicVolume(_ volume: Float) {
+        self.micVolume = max(0.0, min(1.0, volume))  // Clamp to 0.0-1.0
+        os_log("Mic volume set to %f", log: logger, type: .info, micVolume)
     }
     
     /// Starts recording (starts metronome if not already playing)
@@ -591,8 +600,8 @@ class CoreAudioMetronome {
         // Mix in mic audio if recording
         if isRecording, let micL = micLeft, let micR = micRight {
             for i in 0..<Int(frameCount) {
-                left[i] += micL[i]
-                right[i] += micR[i]
+                left[i] += micL[i] * micVolume
+                right[i] += micR[i] * micVolume
             }
             
             // Write mixed audio to circular buffer for file writing

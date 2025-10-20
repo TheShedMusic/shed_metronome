@@ -116,7 +116,7 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     
     func setMicVolume(_ volume: Float) {
         _micVolume = volume
-        // TODO: Implement mic volume control in CoreAudioMetronome
+        coreAudio.setMicVolume(volume)
     }
     
     func startRecording(path: String) -> Bool {
