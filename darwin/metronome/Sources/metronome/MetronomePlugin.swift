@@ -96,6 +96,16 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               }
               metronome?.setMicVolume(Float(volume))
               result(nil)
+          case "setDirectMonitoring":
+              guard let args = attributes,
+                    let enabled = args["enabled"] as? Bool else {
+                  result(FlutterError(code: "INVALID_ARGUMENT",
+                                      message: "enabled parameter must be a boolean",
+                                      details: nil))
+                  return
+              }
+              metronome?.setDirectMonitoring(enabled: enabled)
+              result(nil)
           case "startRecording":
               guard let args = call.arguments as? [String: Any],
                     let path = args["path"] as? String else {

@@ -97,6 +97,15 @@ class Metronome: MetronomeInterface {
     public func setMicVolume(_ volume: Float) {
         micVolumeNode?.outputVolume = max(0.0, min(1.0, volume))
     }
+    
+    public func setDirectMonitoring(enabled: Bool) {
+        // For legacy implementation, direct monitoring is controlled by connecting/disconnecting
+        // the mic input node to the mixer. Currently mic is always disconnected (lines 70-73),
+        // so this is a no-op for now. When/if we enable monitoring in legacy mode,
+        // we would connect/disconnect the nodes here.
+        print("[Metronome] Direct monitoring \(enabled ? "enabled" : "disabled") (legacy mode - no effect)")
+    }
+    
     /// Start recording audio from the mic (mic only, no clicks)
     public func startRecording(path: String) -> Bool {
         guard !isRecording else {

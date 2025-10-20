@@ -39,6 +39,9 @@ protocol MetronomeInterface {
     /// Set microphone volume
     func setMicVolume(_ volume: Float)
     
+    /// Enable or disable direct monitoring (hearing yourself through headphones)
+    func setDirectMonitoring(enabled: Bool)
+    
     /// Start recording
     /// - Parameter path: File path for recording
     /// - Returns: Success status

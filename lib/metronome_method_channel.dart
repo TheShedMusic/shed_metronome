@@ -265,6 +265,19 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
+  Future<void> setDirectMonitoring(bool enabled) async {
+    try {
+      await methodChannel.invokeMethod<void>('setDirectMonitoring', {
+        'enabled': enabled,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print(e);
+      }
+    }
+  }
+
+  @override
   Future<bool> startRecording(String path) async {
     try {
       final result = await methodChannel.invokeMethod<bool>('startRecording', {

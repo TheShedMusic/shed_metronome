@@ -51,6 +51,9 @@ class CoreAudioMetronome {
     /// Microphone input volume (0.0 to 1.0)
     private var micVolume: Float = 1.0
     
+    /// Whether direct monitoring is enabled (hearing yourself through headphones)
+    private var directMonitoringEnabled: Bool = true
+    
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
     
@@ -139,6 +142,12 @@ class CoreAudioMetronome {
     func setMicVolume(_ volume: Float) {
         self.micVolume = max(0.0, min(1.0, volume))  // Clamp to 0.0-1.0
         os_log("Mic volume set to %f", log: logger, type: .info, micVolume)
+    }
+    
+    /// Enable or disable direct monitoring (hearing yourself through headphones)
+    func setDirectMonitoring(enabled: Bool) {
+        self.directMonitoringEnabled = enabled
+        os_log("Direct monitoring %@", log: logger, type: .info, enabled ? "enabled" : "disabled")
     }
     
     /// Starts recording (starts metronome if not already playing)
@@ -599,19 +608,26 @@ class CoreAudioMetronome {
         
         // Mix in mic audio if recording
         if isRecording, let micL = micLeft, let micR = micRight {
-            for i in 0..<Int(frameCount) {
-                left[i] += micL[i] * micVolume
-                right[i] += micR[i] * micVolume
+            // Apply direct monitoring: only mix mic to output if enabled
+            if directMonitoringEnabled {
+                for i in 0..<Int(frameCount) {
+                    left[i] += micL[i] * micVolume
+                    right[i] += micR[i] * micVolume
+                }
             }
             
-            // Write mixed audio to circular buffer for file writing
+            // Always write mixed audio (clicks + mic) to circular buffer for file writing
             // Interleave stereo samples: L, R, L, R, L, R...
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
+                    // Mix mic with clicks for recording (regardless of monitoring setting)
+                    let recordLeft = left[i] + (directMonitoringEnabled ? 0.0 : micL[i] * micVolume)
+                    let recordRight = right[i] + (directMonitoringEnabled ? 0.0 : micR[i] * micVolume)
+                    
                     // Write left channel
-                    _ = buffer.write(left[i])
+                    _ = buffer.write(recordLeft)
                     // Write right channel
-                    _ = buffer.write(right[i])
+                    _ = buffer.write(recordRight)
                 }
             }
         }

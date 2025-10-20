@@ -119,6 +119,10 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         coreAudio.setMicVolume(volume)
     }
     
+    func setDirectMonitoring(enabled: Bool) {
+        coreAudio.setDirectMonitoring(enabled: enabled)
+    }
+    
     func startRecording(path: String) -> Bool {
         _recordingPath = path
         recordingStartTime = Date().timeIntervalSince1970

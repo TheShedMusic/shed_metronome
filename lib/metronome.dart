@@ -193,6 +193,11 @@ Future<String?> mixAudioFiles({
   );
 }
 
+  /// Enable or disable direct monitoring (hearing yourself through headphones)
+  Future<void> setDirectMonitoring(bool enabled) async {
+    return MetronomePlatform.instance.setDirectMonitoring(enabled);
+  }
+
   ///destroy the metronome
   Future<void> destroy() async {
     _initialized = false;
