@@ -86,7 +86,9 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                                       details: nil))
               }
           case "setMicVolume":
-              guard let volume = call.arguments as? Double else {
+              guard let args = attributes,
+                    let volume = args["volume"] as? Double,
+                    volume >= 0.0 && volume <= 1.0 else {
                   result(FlutterError(code: "INVALID_ARGUMENT",
                                       message: "Volume must be a number between 0.0 and 1.0",
                                       details: nil))
