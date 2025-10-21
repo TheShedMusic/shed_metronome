@@ -107,7 +107,7 @@ class CoreAudioMetronome {
         updateSamplesPerBeat()
         
         // Calculate the latency compensation in samples (30ms)
-        let latencyInSeconds = 0.030
+        let latencyInSeconds = 0.000
         self.latencyCompensationInSamples = Int(sampleRate * latencyInSeconds)
         
         // Initialize the delay buffer with silence
