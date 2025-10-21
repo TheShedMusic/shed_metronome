@@ -564,29 +564,29 @@ class CoreAudioMetronome {
         timeStamp: UnsafePointer<AudioTimeStamp>
     ) {
         let outputBuffers = UnsafeMutableAudioBufferListPointer(ioData)
-        
+
         // Get output buffers (assuming stereo)
         guard outputBuffers.count >= 2 else { return }
-        
+
         let leftChannel = outputBuffers[0].mData?.assumingMemoryBound(to: Float.self)
         let rightChannel = outputBuffers[1].mData?.assumingMemoryBound(to: Float.self)
-        
+
         guard let left = leftChannel, let right = rightChannel else { return }
-        
+
         // Pull mic input samples from the audio unit
         var micLeft: UnsafeMutablePointer<Float>?
         var micRight: UnsafeMutablePointer<Float>?
-        
+
         if isRecording, let audioUnit = ioUnit, let inputBufferStorage = inputBufferListStorage {
             var flags = AudioUnitRenderActionFlags(rawValue: 0)
-            
+
             // Update buffer sizes for this render cycle
             if let bufferList = inputBufferList {
                 for i in 0..<bufferList.count {
                     bufferList[i].mDataByteSize = frameCount * UInt32(MemoryLayout<Float>.size)
                 }
             }
-            
+
             // Pull mic samples from input bus (bus 1)
             let status = AudioUnitRender(
                 audioUnit,
@@ -596,17 +596,15 @@ class CoreAudioMetronome {
                 frameCount,
                 inputBufferStorage
             )
-            
+
             if status == noErr, let bufferList = inputBufferList {
-                // Mic input is typically mono (channel 0)
                 micLeft = bufferList[0].mData?.assumingMemoryBound(to: Float.self)
-                // If stereo mic, use channel 1, otherwise duplicate mono
-                micRight = bufferList.count > 1 ? 
+                micRight = bufferList.count > 1 ?
                     bufferList[1].mData?.assumingMemoryBound(to: Float.self) : micLeft
             }
         }
-        
-        // Generate clicks if playing
+
+        // Generate clicks if playing. At this point, `left` and `right` contain ONLY the click track.
         if isPlaying && !clickBuffer.isEmpty {
             generateClicks(
                 leftBuffer: left,
@@ -618,62 +616,65 @@ class CoreAudioMetronome {
             memset(left, 0, Int(frameCount) * MemoryLayout<Float>.size)
             memset(right, 0, Int(frameCount) * MemoryLayout<Float>.size)
         }
-        
+
         // Mix in mic audio if recording
         if isRecording, let micL = micLeft, let micR = micRight {
-            // Apply direct monitoring: only mix mic to output if enabled
+            
+            // --- Latency Compensation Logic ---
+            
+            // 1. Shift existing samples in the delay buffer to make room for new ones.
+            if micDelayBuffer.count > Int(frameCount * 2) {
+                micDelayBuffer.removeFirst(Int(frameCount * 2))
+            }
+
+            // 2. Append new LIVE mic samples to the delay buffer. We apply volume later.
+            for i in 0..<Int(frameCount) {
+                micDelayBuffer.append(micL[i])
+                micDelayBuffer.append(micR[i])
+            }
+
+            // --- Recording Path (Clicks + Delayed Mic) ---
+
+            // 3. Write to the circular buffer for file writing.
+            // This happens BEFORE we add the live mic for monitoring.
+            if let buffer = audioBuffer {
+                for i in 0..<Int(frameCount) {
+                    let clickLeft = left[i]
+                    let clickRight = right[i]
+
+                    // Calculate the read index to get the properly delayed microphone audio
+                    let delayBufferReadIndex = (micDelayBuffer.count - (Int(frameCount) * 2) + (i * 2)) - (latencyCompensationInSamples * 2)
+
+                    var delayedMicLeft: Float = 0.0
+                    var delayedMicRight: Float = 0.0
+
+                    // Safely read from the delay buffer
+                    if delayBufferReadIndex >= 0 && (delayBufferReadIndex + 1) < micDelayBuffer.count {
+                        delayedMicLeft = micDelayBuffer[delayBufferReadIndex] * micVolume
+                        delayedMicRight = micDelayBuffer[delayBufferReadIndex + 1] * micVolume
+                    }
+
+                    // Mix the clicks with the DELAYED mic audio for the final recording
+                    let finalRecordLeft = clickLeft + delayedMicLeft
+                    let finalRecordRight = clickRight + delayedMicRight
+                    
+                    _ = buffer.write(finalRecordLeft)
+                    _ = buffer.write(finalRecordRight)
+                }
+            }
+
+            // --- Monitoring Path (Clicks + Live Mic) ---
+
+            // 4. If direct monitoring is on, mix the LIVE mic into the output buffers.
+            // This is what the user hears in their headphones.
             if directMonitoringEnabled {
                 for i in 0..<Int(frameCount) {
                     left[i] += micL[i] * micVolume
                     right[i] += micR[i] * micVolume
                 }
             }
-            
-            // --- Start of Latency Compensation Logic ---
-
-            // 1. Shift existing samples in the delay buffer
-            if micDelayBuffer.count > Int(frameCount * 2) {
-                micDelayBuffer.removeFirst(Int(frameCount * 2))
-            }
-
-
-            // 2. Append new mic samples to the delay buffer (interleaved)
-            for i in 0..<Int(frameCount) {
-                micDelayBuffer.append(micL[i] * micVolume)
-                micDelayBuffer.append(micR[i] * micVolume)
-            }
-
-
-            // 3. Write to the circular buffer for file writing, using delayed mic audio
-            if let buffer = audioBuffer {
-                for i in 0..<Int(frameCount) {
-                    let recordLeft = left[i]
-                    let recordRight = right[i]
-
-                    // Calculate the read index for the delayed microphone audio
-                    let delayBufferReadIndex = (micDelayBuffer.count - (Int(frameCount) * 2) + (i * 2)) - (latencyCompensationInSamples * 2)
-
-                    var delayedMicLeft: Float = 0.0
-                    var delayedMicRight: Float = 0.0
-
-                    if delayBufferReadIndex >= 0 && (delayBufferReadIndex + 1) < micDelayBuffer.count {
-                        delayedMicLeft = micDelayBuffer[delayBufferReadIndex]
-                        delayedMicRight = micDelayBuffer[delayBufferReadIndex + 1]
-                    }
-
-                    // Mix the clicks with the delayed mic audio for recording
-                    let finalRecordLeft = recordLeft + delayedMicLeft
-                    let finalRecordRight = recordRight + delayedMicRight
-
-
-                    // Write left and right channels to the recording buffer
-                    _ = buffer.write(finalRecordLeft)
-                    _ = buffer.write(finalRecordRight)
-                }
-            }
-                    // --- End of Latency Compensation Logic ---
         }
-        
+
         // Update position
         currentSamplePosition += Float64(frameCount)
     }
