@@ -52,7 +52,7 @@ class CoreAudioMetronome {
     private var micVolume: Float = 1.0
     
     /// Buffer for storing recent microphone samples to apply latency compensation
-    private var micDelayBuffer: [Float] = []
+    private var clickDelayBuffer: [Float] = []
     
     /// The desired latency compensation in samples
     private var latencyCompensationInSamples: Int = 0
@@ -111,7 +111,7 @@ class CoreAudioMetronome {
         self.latencyCompensationInSamples = Int(sampleRate * latencyInSeconds)
         
         // Initialize the delay buffer with silence
-        self.micDelayBuffer = [Float](repeating: 0.0, count: latencyCompensationInSamples * 2) // Stereo
+        self.clickDelayBuffer = [Float](repeating: 0.0, count: latencyCompensationInSamples * 2) // Stereo
     }
     
     deinit {
@@ -565,12 +565,13 @@ class CoreAudioMetronome {
     ) {
         let outputBuffers = UnsafeMutableAudioBufferListPointer(ioData)
 
+        // Get output buffers (assuming stereo)
         guard outputBuffers.count >= 2 else { return }
 
         let left = outputBuffers[0].mData!.assumingMemoryBound(to: Float.self)
         let right = outputBuffers[1].mData!.assumingMemoryBound(to: Float.self)
 
-        // Pull mic input samples
+        // Pull mic input samples from the audio unit
         var micLeft: UnsafeMutablePointer<Float>?
         var micRight: UnsafeMutablePointer<Float>?
 
@@ -588,65 +589,62 @@ class CoreAudioMetronome {
             }
         }
 
-        // 1. Generate clicks into the output buffers first.
+        // 1. Generate LIVE clicks into the output buffers. This is what the user hears.
         if isPlaying && !clickBuffer.isEmpty {
             generateClicks(leftBuffer: left, rightBuffer: right, frameCount: Int(frameCount))
         } else {
+            // Silence if not playing
             memset(left, 0, Int(frameCount) * MemoryLayout<Float>.size)
             memset(right, 0, Int(frameCount) * MemoryLayout<Float>.size)
         }
 
-        // Process mic audio only if recording
+        // Process mic and recording logic
         if isRecording, let micL = micLeft, let micR = micRight {
             
-            // --- Buffer Management ---
+            // --- Latency Compensation: Click Delay Path ---
             
-            // 2. Append new LIVE mic samples to our history buffer.
+            // 2. Append the LIVE clicks we just generated to our delay buffer.
             for i in 0..<Int(frameCount) {
-                micDelayBuffer.append(micL[i])
-                micDelayBuffer.append(micR[i]) // Interleaving stereo
+                clickDelayBuffer.append(left[i])  // left channel click
+                clickDelayBuffer.append(right[i]) // right channel click
             }
 
-            // 3. Trim the buffer by removing the oldest samples.
-            // This keeps the buffer at a fixed size equal to the latency amount,
-            // acting as a sliding window of recent audio.
-            let requiredBufferSize = latencyCompensationInSamples * 2
-            if micDelayBuffer.count > requiredBufferSize {
-                let overflow = micDelayBuffer.count - requiredBufferSize
-                micDelayBuffer.removeFirst(overflow)
+            // 3. Trim the click delay buffer to maintain the correct latency duration.
+            let requiredClickBufferSize = latencyCompensationInSamples * 2
+            if clickDelayBuffer.count > requiredClickBufferSize {
+                let overflow = clickDelayBuffer.count - requiredClickBufferSize
+                clickDelayBuffer.removeFirst(overflow)
             }
 
-            // --- Recording Path ---
+            // --- Recording Path (Delayed Clicks + Live Mic) ---
             
-            // 4. Write the mix of clicks and DELAYED mic to the recording file.
+            // 4. Write the final, aligned audio to the circular buffer for file writing.
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
-                    var delayedMicLeft: Float = 0.0
-                    var delayedMicRight: Float = 0.0
+                    var delayedClickLeft: Float = 0.0
+                    var delayedClickRight: Float = 0.0
 
-                    // Read from the beginning of the buffer, which holds the oldest (most delayed) samples.
-                    if micDelayBuffer.count >= requiredBufferSize {
-                         // As we loop through the current frame (i), we read from a corresponding position
-                         // in our delay buffer.
+                    // Read the delayed click from the start of our buffer.
+                    if clickDelayBuffer.count >= requiredClickBufferSize {
                         let readIndex = i * 2
-                        if (readIndex + 1) < micDelayBuffer.count {
-                           delayedMicLeft = micDelayBuffer[readIndex] * micVolume
-                           delayedMicRight = micDelayBuffer[readIndex + 1] * micVolume
+                        if (readIndex + 1) < clickDelayBuffer.count {
+                           delayedClickLeft = clickDelayBuffer[readIndex]
+                           delayedClickRight = clickDelayBuffer[readIndex + 1]
                         }
                     }
 
-                    // Mix clicks (from the output buffer) with the delayed mic for the recording.
-                    let finalRecordLeft = left[i] + delayedMicLeft
-                    let finalRecordRight = right[i] + delayedMicRight
+                    // Mix the DELAYED click with the LIVE (but inherently latent) mic signal.
+                    let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
+                    let finalRecordRight = delayedClickRight + (micR[i] * micVolume)
                     
                     _ = buffer.write(finalRecordLeft)
                     _ = buffer.write(finalRecordRight)
                 }
             }
 
-            // --- Monitoring Path ---
+            // --- Monitoring Path (Live Clicks + Live Mic) ---
             
-            // 5. If enabled, add LIVE mic audio to the output buffer for the user to hear.
+            // 5. If enabled, add the LIVE mic to the LIVE clicks for monitoring.
             if directMonitoringEnabled {
                 for i in 0..<Int(frameCount) {
                     left[i] += micL[i] * micVolume
