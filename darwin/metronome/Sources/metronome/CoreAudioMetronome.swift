@@ -296,7 +296,7 @@ class CoreAudioMetronome {
         
         try session.setCategory(
             .playAndRecord,
-            mode: .measurement,  // Low latency mode
+            mode: .default,  // Low latency mode
             options: [.defaultToSpeaker, .allowBluetooth]
         )
         
