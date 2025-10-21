@@ -51,6 +51,12 @@ class CoreAudioMetronome {
     /// Microphone input volume (0.0 to 1.0)
     private var micVolume: Float = 1.0
     
+    /// Buffer for storing recent microphone samples to apply latency compensation
+    private var micDelayBuffer: [Float] = []
+    
+    /// The desired latency compensation in samples
+    private var latencyCompensationInSamples: Int = 0
+    
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
     
@@ -99,6 +105,13 @@ class CoreAudioMetronome {
         
         // Calculate samples per beat
         updateSamplesPerBeat()
+        
+        // Calculate the latency compensation in samples (30ms)
+        let latencyInSeconds = 0.030
+        self.latencyCompensationInSamples = Int(sampleRate * latencyInSeconds)
+        
+        // Initialize the delay buffer with silence
+        self.micDelayBuffer = [Float](repeating: 0.0, count: latencyCompensationInSamples * 2) // Stereo
     }
     
     deinit {
@@ -616,20 +629,49 @@ class CoreAudioMetronome {
                 }
             }
             
-            // Always write mixed audio (clicks + mic) to circular buffer for file writing
-            // Interleave stereo samples: L, R, L, R, L, R...
+            // --- Start of Latency Compensation Logic ---
+
+            // 1. Shift existing samples in the delay buffer
+            if micDelayBuffer.count > Int(frameCount * 2) {
+                micDelayBuffer.removeFirst(Int(frameCount * 2))
+            }
+
+
+            // 2. Append new mic samples to the delay buffer (interleaved)
+            for i in 0..<Int(frameCount) {
+                micDelayBuffer.append(micL[i] * micVolume)
+                micDelayBuffer.append(micR[i] * micVolume)
+            }
+
+
+            // 3. Write to the circular buffer for file writing, using delayed mic audio
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
-                    // Mix mic with clicks for recording (regardless of monitoring setting)
-                    let recordLeft = left[i] + (directMonitoringEnabled ? 0.0 : micL[i] * micVolume)
-                    let recordRight = right[i] + (directMonitoringEnabled ? 0.0 : micR[i] * micVolume)
-                    
-                    // Write left channel
-                    _ = buffer.write(recordLeft)
-                    // Write right channel
-                    _ = buffer.write(recordRight)
+                    let recordLeft = left[i]
+                    let recordRight = right[i]
+
+                    // Calculate the read index for the delayed microphone audio
+                    let delayBufferReadIndex = (micDelayBuffer.count - (Int(frameCount) * 2) + (i * 2)) - (latencyCompensationInSamples * 2)
+
+                    var delayedMicLeft: Float = 0.0
+                    var delayedMicRight: Float = 0.0
+
+                    if delayBufferReadIndex >= 0 && (delayBufferReadIndex + 1) < micDelayBuffer.count {
+                        delayedMicLeft = micDelayBuffer[delayBufferReadIndex]
+                        delayedMicRight = micDelayBuffer[delayBufferReadIndex + 1]
+                    }
+
+                    // Mix the clicks with the delayed mic audio for recording
+                    let finalRecordLeft = recordLeft + delayedMicLeft
+                    let finalRecordRight = recordRight + delayedMicRight
+
+
+                    // Write left and right channels to the recording buffer
+                    _ = buffer.write(finalRecordLeft)
+                    _ = buffer.write(finalRecordRight)
                 }
             }
+                    // --- End of Latency Compensation Logic ---
         }
         
         // Update position
