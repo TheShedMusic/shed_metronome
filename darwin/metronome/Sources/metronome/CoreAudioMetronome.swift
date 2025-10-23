@@ -51,12 +51,6 @@ class CoreAudioMetronome {
     /// Microphone input volume (0.0 to 1.0)
     private var micVolume: Float = 1.0
     
-    /// Buffer for storing recent microphone samples to apply latency compensation
-    private var clickDelayBuffer: [Float] = []
-    
-    /// The desired latency compensation in samples
-    private var latencyCompensationInSamples: Int = 0
-    
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
     
@@ -105,13 +99,6 @@ class CoreAudioMetronome {
         
         // Calculate samples per beat
         updateSamplesPerBeat()
-        
-        // Calculate the latency compensation in samples (30ms)
-        let latencyInSeconds = 0.000
-        self.latencyCompensationInSamples = Int(sampleRate * latencyInSeconds)
-        
-        // Initialize the delay buffer with silence
-        self.clickDelayBuffer = [Float](repeating: 0.0, count: latencyCompensationInSamples * 2) // Stereo
     }
     
     deinit {
@@ -601,50 +588,19 @@ class CoreAudioMetronome {
         // Process mic and recording logic
         if isRecording, let micL = micLeft, let micR = micRight {
             
-            // --- Latency Compensation: Click Delay Path ---
-            
-            // 2. Append the LIVE clicks we just generated to our delay buffer.
-            for i in 0..<Int(frameCount) {
-                clickDelayBuffer.append(left[i])  // left channel click
-                clickDelayBuffer.append(right[i]) // right channel click
-            }
-
-            // 3. Trim the click delay buffer to maintain the correct latency duration.
-            let requiredClickBufferSize = latencyCompensationInSamples * 2
-            if clickDelayBuffer.count > requiredClickBufferSize {
-                let overflow = clickDelayBuffer.count - requiredClickBufferSize
-                clickDelayBuffer.removeFirst(overflow)
-            }
-
-            // --- Recording Path (Delayed Clicks + Live Mic) ---
-            
-            // 4. Write the final, aligned audio to the circular buffer for file writing.
+            // Write mixed audio (clicks + mic) to circular buffer for file writing
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
-                    var delayedClickLeft: Float = 0.0
-                    var delayedClickRight: Float = 0.0
-
-                    // Read the delayed click from the start of our buffer.
-                    if clickDelayBuffer.count >= requiredClickBufferSize {
-                        let readIndex = i * 2
-                        if (readIndex + 1) < clickDelayBuffer.count {
-                           delayedClickLeft = clickDelayBuffer[readIndex]
-                           delayedClickRight = clickDelayBuffer[readIndex + 1]
-                        }
-                    }
-
-                    // Mix the DELAYED click with the LIVE (but inherently latent) mic signal.
-                    let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
-                    let finalRecordRight = delayedClickRight + (micR[i] * micVolume)
+                    // Mix the live clicks with the mic signal
+                    let finalRecordLeft = left[i] + (micL[i] * micVolume)
+                    let finalRecordRight = right[i] + (micR[i] * micVolume)
                     
                     _ = buffer.write(finalRecordLeft)
                     _ = buffer.write(finalRecordRight)
                 }
             }
 
-            // --- Monitoring Path (Live Clicks + Live Mic) ---
-            
-            // 5. If enabled, add the LIVE mic to the LIVE clicks for monitoring.
+            // If direct monitoring enabled, add the live mic to the output for monitoring
             if directMonitoringEnabled {
                 for i in 0..<Int(frameCount) {
                     left[i] += micL[i] * micVolume
