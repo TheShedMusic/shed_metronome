@@ -175,8 +175,8 @@ class CoreAudioMetronome {
         recordingStartSample = currentSamplePosition
         
         // Clear the delay buffer to start fresh
-        let bufferSize = latencyCompensationInSamples * 2  // Stereo
-        clickDelayBuffer = [Float](repeating: 0.0, count: bufferSize)
+        let delayBufferSize = latencyCompensationInSamples * 2  // Stereo
+        clickDelayBuffer = [Float](repeating: 0.0, count: delayBufferSize)
         
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
