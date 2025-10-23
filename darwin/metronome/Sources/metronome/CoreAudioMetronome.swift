@@ -871,8 +871,9 @@ class CoreAudioMetronome {
                     _ = delayBuffer.write(right[i])  // Right channel
                     
                     // Read delayed clicks from buffer (old clicks that were written earlier)
-                    let delayedClickLeft = delayBuffer.read() ?? 0.0
-                    let delayedClickRight = delayBuffer.read() ?? 0.0
+                    let delayedClicks = delayBuffer.read(maxCount: 2)  // Read L+R pair
+                    let delayedClickLeft = delayedClicks.count >= 1 ? delayedClicks[0] : 0.0
+                    let delayedClickRight = delayedClicks.count >= 2 ? delayedClicks[1] : 0.0
                     
                     // Mix the DELAYED clicks with the LIVE mic signal for recording
                     let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
