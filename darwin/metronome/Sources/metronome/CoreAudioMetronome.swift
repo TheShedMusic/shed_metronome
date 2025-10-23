@@ -865,12 +865,16 @@ class CoreAudioMetronome {
             
             // Write mixed audio (delayed clicks + mic) to circular buffer for file writing
             if let buffer = audioBuffer, let delayBuffer = clickDelayBuffer {
+                
+                // FIRST PASS: Write all current clicks to delay buffer
                 for i in 0..<Int(frameCount) {
-                    // Write current clicks to delay buffer (for future reading)
                     _ = delayBuffer.write(left[i])   // Left channel
                     _ = delayBuffer.write(right[i])  // Right channel
-                    
-                    // Read delayed clicks from buffer (old clicks that were written earlier)
+                }
+                
+                // SECOND PASS: Read delayed clicks and mix with mic for recording
+                for i in 0..<Int(frameCount) {
+                    // Read delayed clicks from buffer (old clicks written earlier)
                     let delayedClicks = delayBuffer.read(maxCount: 2)  // Read L+R pair
                     let delayedClickLeft = delayedClicks.count >= 1 ? delayedClicks[0] : 0.0
                     let delayedClickRight = delayedClicks.count >= 2 ? delayedClicks[1] : 0.0
