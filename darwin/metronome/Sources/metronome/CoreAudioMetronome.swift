@@ -51,6 +51,12 @@ class CoreAudioMetronome {
     /// Microphone input volume (0.0 to 1.0)
     private var micVolume: Float = 1.0
     
+    /// Buffer for delaying clicks to align with mic latency in recordings
+    private var clickDelayBuffer: [Float] = []
+    
+    /// The measured latency compensation in samples (based on AVAudioSession.inputLatency)
+    private var latencyCompensationInSamples: Int = 0
+    
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
     
@@ -167,6 +173,10 @@ class CoreAudioMetronome {
         // Set recording flag FIRST so mic input works
         isRecording = true
         recordingStartSample = currentSamplePosition
+        
+        // Clear the delay buffer to start fresh
+        let bufferSize = latencyCompensationInSamples * 2  // Stereo
+        clickDelayBuffer = [Float](repeating: 0.0, count: bufferSize)
         
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
@@ -329,6 +339,19 @@ class CoreAudioMetronome {
                outputLatency,
                totalLatency,
                totalLatency * sampleRate)
+        
+        // Calculate latency compensation based on measured input latency
+        // We use inputLatency because that's the delay from mic capture to render callback
+        self.latencyCompensationInSamples = Int(inputLatency * sampleRate)
+        
+        // Initialize the delay buffer (stereo, so 2x the sample count)
+        let bufferSize = latencyCompensationInSamples * 2
+        self.clickDelayBuffer = [Float](repeating: 0.0, count: bufferSize)
+        
+        os_log("Latency compensation: %d samples (%f ms) based on input latency",
+               log: logger, type: .info,
+               latencyCompensationInSamples,
+               inputLatency * 1000.0)
     }
     
     // MARK: - Audio Unit Setup
@@ -600,19 +623,45 @@ class CoreAudioMetronome {
         // Process mic and recording logic
         if isRecording, let micL = micLeft, let micR = micRight {
             
-            // Write mixed audio (clicks + mic) to circular buffer for file writing
+            // Append live clicks to delay buffer for latency compensation
+            for i in 0..<Int(frameCount) {
+                clickDelayBuffer.append(left[i])   // Left channel
+                clickDelayBuffer.append(right[i])  // Right channel
+            }
+            
+            // Maintain buffer at the target size (trim excess from the front)
+            let targetBufferSize = latencyCompensationInSamples * 2  // Stereo
+            if clickDelayBuffer.count > targetBufferSize {
+                let excess = clickDelayBuffer.count - targetBufferSize
+                clickDelayBuffer.removeFirst(excess)
+            }
+            
+            // Write mixed audio (delayed clicks + mic) to circular buffer for file writing
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
-                    // Mix the live clicks with the mic signal
-                    let finalRecordLeft = left[i] + (micL[i] * micVolume)
-                    let finalRecordRight = right[i] + (micR[i] * micVolume)
+                    var delayedClickLeft: Float = 0.0
+                    var delayedClickRight: Float = 0.0
+                    
+                    // Read delayed clicks from the buffer (only if buffer is full enough)
+                    if clickDelayBuffer.count >= targetBufferSize {
+                        let readIndex = i * 2
+                        if (readIndex + 1) < clickDelayBuffer.count {
+                            delayedClickLeft = clickDelayBuffer[readIndex]
+                            delayedClickRight = clickDelayBuffer[readIndex + 1]
+                        }
+                    }
+                    
+                    // Mix the DELAYED clicks with the LIVE mic signal for recording
+                    let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
+                    let finalRecordRight = delayedClickRight + (micR[i] * micVolume)
                     
                     _ = buffer.write(finalRecordLeft)
                     _ = buffer.write(finalRecordRight)
                 }
             }
 
-            // If direct monitoring enabled, add the live mic to the output for monitoring
+            // If direct monitoring enabled, add the LIVE mic to the LIVE clicks for monitoring
+            // (No delay here - we want monitoring to feel immediate)
             if directMonitoringEnabled {
                 for i in 0..<Int(frameCount) {
                     left[i] += micL[i] * micVolume
