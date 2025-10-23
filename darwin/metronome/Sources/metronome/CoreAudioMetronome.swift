@@ -236,6 +236,14 @@ class CoreAudioMetronome {
         let audioFile = try AVAudioFile(forReading: url)
         let frameCount = AVAudioFrameCount(audioFile.length)
         
+        let fileFormat = audioFile.fileFormat
+        os_log("Loading click from: %@", log: logger, type: .info, url.lastPathComponent)
+        os_log("File format: %d channels, %f Hz, %@ interleaved",
+               log: logger, type: .info,
+               fileFormat.channelCount,
+               fileFormat.sampleRate,
+               fileFormat.isInterleaved ? "IS" : "NOT")
+        
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: audioFile.processingFormat,
             frameCapacity: frameCount
@@ -256,13 +264,24 @@ class CoreAudioMetronome {
             count: clickBufferLength
         ))
         
-        os_log("Click sound loaded: %d samples", log: logger, type: .info, clickBufferLength)
+        os_log("Click sound loaded: %d samples at %f Hz", 
+               log: logger, type: .info, 
+               clickBufferLength,
+               audioFile.processingFormat.sampleRate)
     }
     
     /// Loads the accented click sound into memory
     func loadAccentedClickSound(from url: URL) throws {
         let audioFile = try AVAudioFile(forReading: url)
         let frameCount = AVAudioFrameCount(audioFile.length)
+        
+        let fileFormat = audioFile.fileFormat
+        os_log("Loading accented click from: %@", log: logger, type: .info, url.lastPathComponent)
+        os_log("File format: %d channels, %f Hz, %@ interleaved",
+               log: logger, type: .info,
+               fileFormat.channelCount,
+               fileFormat.sampleRate,
+               fileFormat.isInterleaved ? "IS" : "NOT")
         
         guard let buffer = AVAudioPCMBuffer(
             pcmFormat: audioFile.processingFormat,
@@ -284,7 +303,10 @@ class CoreAudioMetronome {
             count: accentedClickBufferLength
         ))
         
-        os_log("Accented click sound loaded: %d samples", log: logger, type: .info, accentedClickBufferLength)
+        os_log("Accented click sound loaded: %d samples at %f Hz", 
+               log: logger, type: .info, 
+               accentedClickBufferLength,
+               audioFile.processingFormat.sampleRate)
     }
     
     /// Sets the time signature (beats per bar)
