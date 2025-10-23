@@ -313,10 +313,22 @@ class CoreAudioMetronome {
         )
         updateSamplesPerBeat()
         
+        // Log detailed latency information
+        let inputLatency = session.inputLatency
+        let outputLatency = session.outputLatency
+        let bufferDuration = session.ioBufferDuration
+        let totalLatency = inputLatency + outputLatency
+        
         os_log("Audio session configured: %f Hz, buffer: %f s",
                log: logger, type: .info,
                session.sampleRate,
                session.ioBufferDuration)
+        os_log("Latency - Input: %f s, Output: %f s, Total: %f s (%f samples)",
+               log: logger, type: .info,
+               inputLatency,
+               outputLatency,
+               totalLatency,
+               totalLatency * sampleRate)
     }
     
     // MARK: - Audio Unit Setup
