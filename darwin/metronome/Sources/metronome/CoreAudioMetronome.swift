@@ -244,16 +244,6 @@ class CoreAudioMetronome {
                fileFormat.sampleRate,
                fileFormat.isInterleaved ? "IS" : "NOT")
         
-        // Read into buffer with file's native format
-        guard let fileBuffer = AVAudioPCMBuffer(
-            pcmFormat: audioFile.fileFormat,
-            frameCapacity: frameCount
-        ) else {
-            throw CoreAudioError.configurationFailed("Failed to create audio buffer")
-        }
-        
-        try audioFile.read(into: fileBuffer)
-        
         // Check if resampling is needed
         if fileFormat.sampleRate != sampleRate {
             os_log("Resampling click from %f Hz to %f Hz", 
@@ -261,15 +251,20 @@ class CoreAudioMetronome {
                    fileFormat.sampleRate,
                    sampleRate)
             
+            // Create target format matching the file's interleaving but at new sample rate
+            guard let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: sampleRate,
+                channels: AVAudioChannelCount(fileFormat.channelCount),
+                interleaved: fileFormat.isInterleaved
+            ) else {
+                throw CoreAudioError.configurationFailed("Failed to create target format")
+            }
+            
             // Create converter to resample
             guard let converter = AVAudioConverter(
-                from: audioFile.fileFormat,
-                to: AVAudioFormat(
-                    commonFormat: .pcmFormatFloat32,
-                    sampleRate: sampleRate,
-                    channels: 1,
-                    interleaved: false
-                )!
+                from: fileFormat,
+                to: targetFormat
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create audio converter")
             }
@@ -279,38 +274,68 @@ class CoreAudioMetronome {
             let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
             
             guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: converter.outputFormat,
+                pcmFormat: targetFormat,
                 frameCapacity: outputFrameCount
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create output buffer")
             }
             
-            // Convert
+            // Create input buffer and read file
+            guard let inputBuffer = AVAudioPCMBuffer(
+                pcmFormat: fileFormat,
+                frameCapacity: frameCount
+            ) else {
+                throw CoreAudioError.configurationFailed("Failed to create input buffer")
+            }
+            
+            try audioFile.read(into: inputBuffer)
+            
+            // Convert with input provider
             var error: NSError?
+            var inputComplete = false
+            
             converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+                if inputComplete {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                inputComplete = true
                 outStatus.pointee = .haveData
-                return fileBuffer
+                return inputBuffer
             }
             
             if let error = error {
                 throw CoreAudioError.configurationFailed("Conversion failed: \(error.localizedDescription)")
             }
             
-            // Extract converted samples
-            guard let floatChannelData = outputBuffer.floatChannelData else {
-                throw CoreAudioError.configurationFailed("Failed to get float channel data")
+            // Extract converted samples (handle both interleaved and non-interleaved)
+            if targetFormat.isInterleaved {
+                // For interleaved, data is in mData as a single array
+                guard let audioData = outputBuffer.audioBufferList.pointee.mBuffers.mData else {
+                    throw CoreAudioError.configurationFailed("Failed to get audio data")
+                }
+                
+                let floatPtr = audioData.assumingMemoryBound(to: Float.self)
+                clickBufferLength = Int(outputBuffer.frameLength)
+                clickBuffer = Array(UnsafeBufferPointer(start: floatPtr, count: clickBufferLength))
+                
+            } else {
+                // For non-interleaved, use floatChannelData
+                guard let floatChannelData = outputBuffer.floatChannelData else {
+                    throw CoreAudioError.configurationFailed("Failed to get float channel data")
+                }
+                
+                clickBufferLength = Int(outputBuffer.frameLength)
+                clickBuffer = Array(UnsafeBufferPointer(
+                    start: floatChannelData[0],
+                    count: clickBufferLength
+                ))
             }
             
-            clickBufferLength = Int(outputBuffer.frameLength)
-            clickBuffer = Array(UnsafeBufferPointer(
-                start: floatChannelData[0],
-                count: clickBufferLength
-            ))
-            
         } else {
-            // No resampling needed - use processing format (converts to float)
+            // No resampling needed - read directly
             guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: audioFile.processingFormat,
+                pcmFormat: fileFormat,
                 frameCapacity: frameCount
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create audio buffer")
@@ -318,15 +343,27 @@ class CoreAudioMetronome {
             
             try audioFile.read(into: buffer)
             
-            guard let floatChannelData = buffer.floatChannelData else {
-                throw CoreAudioError.configurationFailed("Failed to get float channel data")
+            // Handle both interleaved and non-interleaved formats
+            if fileFormat.isInterleaved {
+                guard let audioData = buffer.audioBufferList.pointee.mBuffers.mData else {
+                    throw CoreAudioError.configurationFailed("Failed to get audio data")
+                }
+                
+                let floatPtr = audioData.assumingMemoryBound(to: Float.self)
+                clickBufferLength = Int(buffer.frameLength)
+                clickBuffer = Array(UnsafeBufferPointer(start: floatPtr, count: clickBufferLength))
+                
+            } else {
+                guard let floatChannelData = buffer.floatChannelData else {
+                    throw CoreAudioError.configurationFailed("Failed to get float channel data")
+                }
+                
+                clickBufferLength = Int(buffer.frameLength)
+                clickBuffer = Array(UnsafeBufferPointer(
+                    start: floatChannelData[0],
+                    count: clickBufferLength
+                ))
             }
-            
-            clickBufferLength = Int(buffer.frameLength)
-            clickBuffer = Array(UnsafeBufferPointer(
-                start: floatChannelData[0],
-                count: clickBufferLength
-            ))
         }
         
         os_log("Click sound loaded: %d samples at %f Hz", 
@@ -348,16 +385,6 @@ class CoreAudioMetronome {
                fileFormat.sampleRate,
                fileFormat.isInterleaved ? "IS" : "NOT")
         
-        // Read into buffer with file's native format
-        guard let fileBuffer = AVAudioPCMBuffer(
-            pcmFormat: audioFile.fileFormat,
-            frameCapacity: frameCount
-        ) else {
-            throw CoreAudioError.configurationFailed("Failed to create audio buffer")
-        }
-        
-        try audioFile.read(into: fileBuffer)
-        
         // Check if resampling is needed
         if fileFormat.sampleRate != sampleRate {
             os_log("Resampling accented click from %f Hz to %f Hz", 
@@ -365,15 +392,20 @@ class CoreAudioMetronome {
                    fileFormat.sampleRate,
                    sampleRate)
             
+            // Create target format matching the file's interleaving but at new sample rate
+            guard let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: sampleRate,
+                channels: AVAudioChannelCount(fileFormat.channelCount),
+                interleaved: fileFormat.isInterleaved
+            ) else {
+                throw CoreAudioError.configurationFailed("Failed to create target format")
+            }
+            
             // Create converter to resample
             guard let converter = AVAudioConverter(
-                from: audioFile.fileFormat,
-                to: AVAudioFormat(
-                    commonFormat: .pcmFormatFloat32,
-                    sampleRate: sampleRate,
-                    channels: 1,
-                    interleaved: false
-                )!
+                from: fileFormat,
+                to: targetFormat
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create audio converter")
             }
@@ -383,38 +415,68 @@ class CoreAudioMetronome {
             let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
             
             guard let outputBuffer = AVAudioPCMBuffer(
-                pcmFormat: converter.outputFormat,
+                pcmFormat: targetFormat,
                 frameCapacity: outputFrameCount
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create output buffer")
             }
             
-            // Convert
+            // Create input buffer and read file
+            guard let inputBuffer = AVAudioPCMBuffer(
+                pcmFormat: fileFormat,
+                frameCapacity: frameCount
+            ) else {
+                throw CoreAudioError.configurationFailed("Failed to create input buffer")
+            }
+            
+            try audioFile.read(into: inputBuffer)
+            
+            // Convert with input provider
             var error: NSError?
+            var inputComplete = false
+            
             converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+                if inputComplete {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                inputComplete = true
                 outStatus.pointee = .haveData
-                return fileBuffer
+                return inputBuffer
             }
             
             if let error = error {
                 throw CoreAudioError.configurationFailed("Conversion failed: \(error.localizedDescription)")
             }
             
-            // Extract converted samples
-            guard let floatChannelData = outputBuffer.floatChannelData else {
-                throw CoreAudioError.configurationFailed("Failed to get float channel data")
+            // Extract converted samples (handle both interleaved and non-interleaved)
+            if targetFormat.isInterleaved {
+                // For interleaved, data is in mData as a single array
+                guard let audioData = outputBuffer.audioBufferList.pointee.mBuffers.mData else {
+                    throw CoreAudioError.configurationFailed("Failed to get audio data")
+                }
+                
+                let floatPtr = audioData.assumingMemoryBound(to: Float.self)
+                accentedClickBufferLength = Int(outputBuffer.frameLength)
+                accentedClickBuffer = Array(UnsafeBufferPointer(start: floatPtr, count: accentedClickBufferLength))
+                
+            } else {
+                // For non-interleaved, use floatChannelData
+                guard let floatChannelData = outputBuffer.floatChannelData else {
+                    throw CoreAudioError.configurationFailed("Failed to get float channel data")
+                }
+                
+                accentedClickBufferLength = Int(outputBuffer.frameLength)
+                accentedClickBuffer = Array(UnsafeBufferPointer(
+                    start: floatChannelData[0],
+                    count: accentedClickBufferLength
+                ))
             }
             
-            accentedClickBufferLength = Int(outputBuffer.frameLength)
-            accentedClickBuffer = Array(UnsafeBufferPointer(
-                start: floatChannelData[0],
-                count: accentedClickBufferLength
-            ))
-            
         } else {
-            // No resampling needed - use processing format (converts to float)
+            // No resampling needed - read directly
             guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: audioFile.processingFormat,
+                pcmFormat: fileFormat,
                 frameCapacity: frameCount
             ) else {
                 throw CoreAudioError.configurationFailed("Failed to create audio buffer")
@@ -422,15 +484,27 @@ class CoreAudioMetronome {
             
             try audioFile.read(into: buffer)
             
-            guard let floatChannelData = buffer.floatChannelData else {
-                throw CoreAudioError.configurationFailed("Failed to get float channel data")
+            // Handle both interleaved and non-interleaved formats
+            if fileFormat.isInterleaved {
+                guard let audioData = buffer.audioBufferList.pointee.mBuffers.mData else {
+                    throw CoreAudioError.configurationFailed("Failed to get audio data")
+                }
+                
+                let floatPtr = audioData.assumingMemoryBound(to: Float.self)
+                accentedClickBufferLength = Int(buffer.frameLength)
+                accentedClickBuffer = Array(UnsafeBufferPointer(start: floatPtr, count: accentedClickBufferLength))
+                
+            } else {
+                guard let floatChannelData = buffer.floatChannelData else {
+                    throw CoreAudioError.configurationFailed("Failed to get float channel data")
+                }
+                
+                accentedClickBufferLength = Int(buffer.frameLength)
+                accentedClickBuffer = Array(UnsafeBufferPointer(
+                    start: floatChannelData[0],
+                    count: accentedClickBufferLength
+                ))
             }
-            
-            accentedClickBufferLength = Int(buffer.frameLength)
-            accentedClickBuffer = Array(UnsafeBufferPointer(
-                start: floatChannelData[0],
-                count: accentedClickBufferLength
-            ))
         }
         
         os_log("Accented click sound loaded: %d samples at %f Hz", 
