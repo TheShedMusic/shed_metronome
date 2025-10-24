@@ -367,9 +367,11 @@ class CoreAudioMetronome {
                totalLatency,
                totalLatency * sampleRate)
         
-        // Calculate latency compensation based on measured input latency
-        // We use inputLatency because that's the delay from mic capture to render callback
-        self.latencyCompensationInSamples = Int(inputLatency * sampleRate)
+        // Calculate latency compensation based on empirical measurement
+        // System reports ~2.4ms input latency, but actual measured delay is ~36ms
+        // Using the measured value for accurate compensation
+        let actualLatencySeconds = 0.036  // 36ms measured empirically
+        self.latencyCompensationInSamples = Int(actualLatencySeconds * sampleRate)
         
         // Create circular buffer for click delay
         // Need space for: delay amount + largest possible frame size
@@ -387,9 +389,10 @@ class CoreAudioMetronome {
         
         self.clickDelayBuffer = delayBuffer
         
-        os_log("Latency compensation: %d samples (%f ms), buffer capacity: %d",
+        os_log("Latency compensation: %d samples (%f ms measured, system reported %f ms), buffer capacity: %d",
                log: logger, type: .info,
                latencyCompensationInSamples,
+               actualLatencySeconds * 1000.0,
                inputLatency * 1000.0,
                delayBufferCapacity)
     }
