@@ -2,6 +2,33 @@ import AVFoundation
 import AudioToolbox
 import os.log
 
+/// Simple soft-knee limiter to prevent clipping
+/// Uses tanh() for smooth, musical compression without look-ahead (zero latency)
+class SimpleLimiter {
+    private let threshold: Float = 0.8      // Start compressing at 80% (-1.94 dBFS)
+    private let ceiling: Float = 0.95       // Hard ceiling at 95% (-0.44 dBFS)
+    
+    /// Apply soft-knee limiting to prevent harsh clipping
+    func process(_ sample: Float) -> Float {
+        let absSample = abs(sample)
+        
+        // Below threshold: pass through unchanged
+        if absSample < threshold {
+            return sample
+        }
+        
+        // Above threshold: soft compression
+        let excess = absSample - threshold
+        let range = ceiling - threshold
+        
+        // Soft knee curve (logarithmic)
+        let compressed = threshold + (range * tanh(excess / range))
+        
+        // Preserve sign
+        return sample >= 0 ? compressed : -compressed
+    }
+}
+
 /// Core Audio-based metronome with sample-accurate timing and real-time mixing
 /// Uses Remote I/O Audio Unit with unified render callback for perfect sync between mic and clicks
 class CoreAudioMetronome {
@@ -59,6 +86,15 @@ class CoreAudioMetronome {
     
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
+    
+    /// Limiter for left channel (prevents clipping in .measurement mode)
+    private var limiterLeft = SimpleLimiter()
+    
+    /// Limiter for right channel (prevents clipping in .measurement mode)
+    private var limiterRight = SimpleLimiter()
+    
+    /// Whether to use low-latency mode with limiter (true) or quality mode with delay compensation (false)
+    private var useLowLatencyMode: Bool = true
     
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
@@ -156,6 +192,24 @@ class CoreAudioMetronome {
         os_log("Direct monitoring %@", log: logger, type: .info, enabled ? "enabled" : "disabled")
     }
     
+    /// Set audio mode: low-latency with limiter (.measurement mode) or quality with delay compensation (.default mode)
+    func setLowLatencyMode(enabled: Bool) throws {
+        self.useLowLatencyMode = enabled
+        
+        // If changing modes while running, need to restart audio session
+        let wasPlaying = isPlaying
+        if wasPlaying {
+            try pause()
+        }
+        
+        // Restart with new settings
+        if wasPlaying {
+            try play()
+        }
+        
+        os_log("Low-latency mode %@", log: logger, type: .info, enabled ? "enabled (limiter active)" : "disabled (delay compensation active)")
+    }
+    
     /// Starts recording (starts metronome if not already playing)
     func startRecording(path: String) throws {
         guard !isRecording else { return }
@@ -174,18 +228,24 @@ class CoreAudioMetronome {
         isRecording = true
         recordingStartSample = currentSamplePosition
         
-        // Clear and reinitialize the click delay buffer
-        let maxFrameSize = 4096 * 2  // 4096 frames stereo
-        let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
-        let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
-        
-        // Pre-fill with silence to establish delay offset
-        let delaySamples = latencyCompensationInSamples * 2  // Stereo
-        for _ in 0..<delaySamples {
-            _ = delayBuffer.write(0.0)
+        // Setup delay buffer only in quality mode (not needed in low-latency mode)
+        if !useLowLatencyMode {
+            // Clear and reinitialize the click delay buffer
+            let maxFrameSize = 4096 * 2  // 4096 frames stereo
+            let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
+            let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
+            
+            // Pre-fill with silence to establish delay offset
+            let delaySamples = latencyCompensationInSamples * 2  // Stereo
+            for _ in 0..<delaySamples {
+                _ = delayBuffer.write(0.0)
+            }
+            
+            self.clickDelayBuffer = delayBuffer
+        } else {
+            // Low-latency mode: no delay buffer needed
+            self.clickDelayBuffer = nil
         }
-        
-        self.clickDelayBuffer = delayBuffer
         
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
@@ -331,9 +391,12 @@ class CoreAudioMetronome {
     private func setupAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         
+        // Choose mode based on low-latency setting
+        let audioMode: AVAudioSession.Mode = useLowLatencyMode ? .measurement : .default
+        
         try session.setCategory(
             .playAndRecord,
-            mode: .default,  // Low latency mode
+            mode: audioMode,  // .measurement for low latency + limiter, .default for quality + delay compensation
             options: [.defaultToSpeaker, .allowBluetooth]
         )
         
@@ -367,34 +430,42 @@ class CoreAudioMetronome {
                totalLatency,
                totalLatency * sampleRate)
         
-        // Calculate latency compensation based on empirical measurement
-        // System reports ~2.4ms input latency, but actual measured delay is ~36ms
-        // Using the measured value for accurate compensation
-        let actualLatencySeconds = 0.032  // 30ms average of several devices
-        self.latencyCompensationInSamples = Int(actualLatencySeconds * sampleRate)
-        
-        // Create circular buffer for click delay
-        // Need space for: delay amount + largest possible frame size
-        // Typical buffer is ~256 frames = 512 samples stereo, but allocate extra to be safe
-        let maxFrameSize = 4096 * 2  // 4096 frames stereo = 8192 samples (generous headroom)
-        let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
-        let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
-        
-        // Pre-fill with silence to establish the delay offset
-        // Only fill the delay amount, not the whole buffer
-        let delaySamples = latencyCompensationInSamples * 2  // Stereo
-        for _ in 0..<delaySamples {
-            _ = delayBuffer.write(0.0)
+        if useLowLatencyMode {
+            // Low-latency mode: No delay compensation, use limiter instead
+            self.latencyCompensationInSamples = 0
+            self.clickDelayBuffer = nil
+            os_log("Low-latency mode active: Using limiter, no delay compensation", log: logger, type: .info)
+        } else {
+            // Quality mode: Use delay compensation for better audio quality
+            // Calculate latency compensation based on empirical measurement
+            // System reports ~2.4ms input latency, but actual measured delay is ~36ms
+            // Using the measured value for accurate compensation
+            let actualLatencySeconds = 0.032  // 30ms average of several devices
+            self.latencyCompensationInSamples = Int(actualLatencySeconds * sampleRate)
+            
+            // Create circular buffer for click delay
+            // Need space for: delay amount + largest possible frame size
+            // Typical buffer is ~256 frames = 512 samples stereo, but allocate extra to be safe
+            let maxFrameSize = 4096 * 2  // 4096 frames stereo = 8192 samples (generous headroom)
+            let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
+            let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
+            
+            // Pre-fill with silence to establish the delay offset
+            // Only fill the delay amount, not the whole buffer
+            let delaySamples = latencyCompensationInSamples * 2  // Stereo
+            for _ in 0..<delaySamples {
+                _ = delayBuffer.write(0.0)
+            }
+            
+            self.clickDelayBuffer = delayBuffer
+            
+            os_log("Quality mode active: Latency compensation %d samples (%f ms measured, system reported %f ms), buffer capacity: %d",
+                   log: logger, type: .info,
+                   latencyCompensationInSamples,
+                   actualLatencySeconds * 1000.0,
+                   inputLatency * 1000.0,
+                   delayBufferCapacity)
         }
-        
-        self.clickDelayBuffer = delayBuffer
-        
-        os_log("Latency compensation: %d samples (%f ms measured, system reported %f ms), buffer capacity: %d",
-               log: logger, type: .info,
-               latencyCompensationInSamples,
-               actualLatencySeconds * 1000.0,
-               inputLatency * 1000.0,
-               delayBufferCapacity)
     }
     
     // MARK: - Audio Unit Setup
@@ -666,37 +737,65 @@ class CoreAudioMetronome {
         // Process mic and recording logic
         if isRecording, let micL = micLeft, let micR = micRight {
             
-            // Write mixed audio (delayed clicks + mic) to circular buffer for file writing
-            if let buffer = audioBuffer, let delayBuffer = clickDelayBuffer {
-                
-                // FIRST PASS: Write all current clicks to delay buffer
-                for i in 0..<Int(frameCount) {
-                    _ = delayBuffer.write(left[i])   // Left channel
-                    _ = delayBuffer.write(right[i])  // Right channel
+            if useLowLatencyMode {
+                // LOW-LATENCY MODE: Apply limiter to prevent clipping, no delay compensation
+                if let buffer = audioBuffer {
+                    for i in 0..<Int(frameCount) {
+                        // Apply limiter to mic input to prevent clipping
+                        let limitedMicLeft = limiterLeft.process(micL[i] * micVolume)
+                        let limitedMicRight = limiterRight.process(micR[i] * micVolume)
+                        
+                        // Mix clicks + limited mic for recording
+                        let finalRecordLeft = left[i] + limitedMicLeft
+                        let finalRecordRight = right[i] + limitedMicRight
+                        
+                        _ = buffer.write(finalRecordLeft)
+                        _ = buffer.write(finalRecordRight)
+                    }
                 }
                 
-                // SECOND PASS: Read delayed clicks and mix with mic for recording
-                for i in 0..<Int(frameCount) {
-                    // Read delayed clicks from buffer (old clicks written earlier)
-                    let delayedClicks = delayBuffer.read(maxCount: 2)  // Read L+R pair
-                    let delayedClickLeft = delayedClicks.count >= 1 ? delayedClicks[0] : 0.0
-                    let delayedClickRight = delayedClicks.count >= 2 ? delayedClicks[1] : 0.0
-                    
-                    // Mix the DELAYED clicks with the LIVE mic signal for recording
-                    let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
-                    let finalRecordRight = delayedClickRight + (micR[i] * micVolume)
-                    
-                    _ = buffer.write(finalRecordLeft)
-                    _ = buffer.write(finalRecordRight)
+                // Direct monitoring with limiter
+                if directMonitoringEnabled {
+                    for i in 0..<Int(frameCount) {
+                        left[i] += limiterLeft.process(micL[i] * micVolume)
+                        right[i] += limiterRight.process(micR[i] * micVolume)
+                    }
                 }
-            }
+                
+            } else {
+                // QUALITY MODE: Use delay compensation for better audio quality
+                // Write mixed audio (delayed clicks + mic) to circular buffer for file writing
+                if let buffer = audioBuffer, let delayBuffer = clickDelayBuffer {
+                    
+                    // FIRST PASS: Write all current clicks to delay buffer
+                    for i in 0..<Int(frameCount) {
+                        _ = delayBuffer.write(left[i])   // Left channel
+                        _ = delayBuffer.write(right[i])  // Right channel
+                    }
+                    
+                    // SECOND PASS: Read delayed clicks and mix with mic for recording
+                    for i in 0..<Int(frameCount) {
+                        // Read delayed clicks from buffer (old clicks written earlier)
+                        let delayedClicks = delayBuffer.read(maxCount: 2)  // Read L+R pair
+                        let delayedClickLeft = delayedClicks.count >= 1 ? delayedClicks[0] : 0.0
+                        let delayedClickRight = delayedClicks.count >= 2 ? delayedClicks[1] : 0.0
+                        
+                        // Mix the DELAYED clicks with the LIVE mic signal for recording
+                        let finalRecordLeft = delayedClickLeft + (micL[i] * micVolume)
+                        let finalRecordRight = delayedClickRight + (micR[i] * micVolume)
+                        
+                        _ = buffer.write(finalRecordLeft)
+                        _ = buffer.write(finalRecordRight)
+                    }
+                }
 
-            // If direct monitoring enabled, add the LIVE mic to the LIVE clicks for monitoring
-            // (No delay here - we want monitoring to feel immediate)
-            if directMonitoringEnabled {
-                for i in 0..<Int(frameCount) {
-                    left[i] += micL[i] * micVolume
-                    right[i] += micR[i] * micVolume
+                // If direct monitoring enabled, add the LIVE mic to the LIVE clicks for monitoring
+                // (No delay here - we want monitoring to feel immediate)
+                if directMonitoringEnabled {
+                    for i in 0..<Int(frameCount) {
+                        left[i] += micL[i] * micVolume
+                        right[i] += micR[i] * micVolume
+                    }
                 }
             }
         }

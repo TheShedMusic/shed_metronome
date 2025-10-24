@@ -126,6 +126,10 @@ Future<String?> mixAudioFiles({
   throw UnimplementedError('mixAudioFiles() has not been implemented.');
 }
 
+  Future<void> setLowLatencyMode(bool enabled) {
+    throw UnimplementedError('setLowLatencyMode() has not been implemented.');
+  }
+
   Future<void> destroy() {
     throw UnimplementedError('destroy() has not been implemented.');
   }

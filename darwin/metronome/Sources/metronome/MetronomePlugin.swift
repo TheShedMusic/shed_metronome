@@ -128,6 +128,23 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               let args = call.arguments as? [String: Any]
               let mixResult = mixAudioFiles(attributes: args as NSDictionary?)
               result(mixResult)
+          case "setLowLatencyMode":
+              guard let args = attributes,
+                    let enabled = args["enabled"] as? Bool else {
+                  result(FlutterError(code: "INVALID_ARGUMENT",
+                                      message: "enabled parameter must be a boolean",
+                                      details: nil))
+                  return
+              }
+              // Only Core Audio implementation supports this
+              if let coreAudioAdapter = metronome as? CoreAudioMetronomeAdapter {
+                  coreAudioAdapter.metronome.setLowLatencyMode(enabled: enabled)
+                  result(nil)
+              } else {
+                  result(FlutterError(code: "UNSUPPORTED",
+                                      message: "Low latency mode only supported with Core Audio implementation",
+                                      details: nil))
+              }
               default:
                   result("unkown")
                 break;

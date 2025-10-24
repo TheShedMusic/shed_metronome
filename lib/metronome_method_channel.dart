@@ -352,6 +352,19 @@ Future<String?> mixAudioFiles({
 }
 
   @override
+  Future<void> setLowLatencyMode(bool enabled) async {
+    try {
+      await methodChannel.invokeMethod<void>('setLowLatencyMode', {
+        'enabled': enabled,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('[Metronome] Error setting low latency mode: $e');
+      }
+    }
+  }
+
+  @override
   Future<void> destroy() async {
     try {
       await methodChannel.invokeMethod<void>('destroy');

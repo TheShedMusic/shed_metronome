@@ -198,6 +198,12 @@ Future<String?> mixAudioFiles({
     return MetronomePlatform.instance.setDirectMonitoring(enabled);
   }
 
+  /// Enable or disable low-latency mode (uses limiter, ~5-10ms latency)
+  /// When false (default), uses quality mode with delay compensation (~36ms latency)
+  Future<void> setLowLatencyMode(bool enabled) async {
+    return MetronomePlatform.instance.setLowLatencyMode(enabled);
+  }
+
   ///destroy the metronome
   Future<void> destroy() async {
     _initialized = false;
