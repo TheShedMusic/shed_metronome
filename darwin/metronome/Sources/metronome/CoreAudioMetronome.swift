@@ -174,12 +174,14 @@ class CoreAudioMetronome {
         isRecording = true
         recordingStartSample = currentSamplePosition
         
-        // Clear the click delay buffer by recreating it with silence
-        let delayBufferCapacity = latencyCompensationInSamples * 2  // Stereo
+        // Clear and reinitialize the click delay buffer
+        let maxFrameSize = 4096 * 2  // 4096 frames stereo
+        let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
         let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
         
-        // Pre-fill with silence
-        for _ in 0..<delayBufferCapacity {
+        // Pre-fill with silence to establish delay offset
+        let delaySamples = latencyCompensationInSamples * 2  // Stereo
+        for _ in 0..<delaySamples {
             _ = delayBuffer.write(0.0)
         }
         
@@ -369,21 +371,27 @@ class CoreAudioMetronome {
         // We use inputLatency because that's the delay from mic capture to render callback
         self.latencyCompensationInSamples = Int(inputLatency * sampleRate)
         
-        // Create circular buffer for click delay (stereo, so 2x the sample count)
-        let delayBufferCapacity = latencyCompensationInSamples * 2
+        // Create circular buffer for click delay
+        // Need space for: delay amount + largest possible frame size
+        // Typical buffer is ~256 frames = 512 samples stereo, but allocate extra to be safe
+        let maxFrameSize = 4096 * 2  // 4096 frames stereo = 8192 samples (generous headroom)
+        let delayBufferCapacity = (latencyCompensationInSamples * 2) + maxFrameSize
         let delayBuffer = CircularBuffer<Float>(capacity: delayBufferCapacity)
         
-        // Pre-fill with silence so we have the right amount of delay from the start
-        for _ in 0..<delayBufferCapacity {
+        // Pre-fill with silence to establish the delay offset
+        // Only fill the delay amount, not the whole buffer
+        let delaySamples = latencyCompensationInSamples * 2  // Stereo
+        for _ in 0..<delaySamples {
             _ = delayBuffer.write(0.0)
         }
         
         self.clickDelayBuffer = delayBuffer
         
-        os_log("Latency compensation: %d samples (%f ms) based on input latency",
+        os_log("Latency compensation: %d samples (%f ms), buffer capacity: %d",
                log: logger, type: .info,
                latencyCompensationInSamples,
-               inputLatency * 1000.0)
+               inputLatency * 1000.0,
+               delayBufferCapacity)
     }
     
     // MARK: - Audio Unit Setup
