@@ -189,6 +189,10 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     }
     
     func setLowLatencyMode(enabled: Bool) {
-        coreAudio.setLowLatencyMode(enabled: enabled)
+        do {
+            try coreAudio.setLowLatencyMode(enabled: enabled)
+        } catch {
+            print("[CoreAudioAdapter] Failed to set low latency mode: \(error)")
+        }
     }
 }
