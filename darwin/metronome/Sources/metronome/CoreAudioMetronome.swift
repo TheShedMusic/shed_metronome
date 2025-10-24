@@ -824,10 +824,12 @@ class CoreAudioMetronome {
             // Calculate which beat we're on
             let beatNumber = Int(samplePos / samplesPerBeat)
             
+            // Calculate which tick in the bar we're on (for accent pattern)
+            let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
+            
             // Fire beat callback on beat transitions (not every sample!)
             if beatNumber != lastBeatFired && beatPosition < 100 { // Within first 100 samples of beat
                 lastBeatFired = beatNumber
-                let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
                 
                 // Fire callback on main thread (not real-time safe, but necessary)
                 if let callback = beatCallback {
@@ -835,17 +837,14 @@ class CoreAudioMetronome {
                         callback(tickInBar)
                     }
                 }
-                
-                // Update current beat for accent pattern
-                currentBeat = tickInBar
             }
             
             // If we're at the start of a beat (within click buffer length)
             if beatPosition < Float64(clickBufferLength) {
                 let clickIndex = Int(beatPosition)
                 
-                // Choose click buffer based on accent pattern
-                let useAccent = (timeSignature > 1) && (currentBeat == 0) && !accentedClickBuffer.isEmpty
+                // Choose click buffer based on accent pattern (use tickInBar calculated above, not currentBeat)
+                let useAccent = (timeSignature > 1) && (tickInBar == 0) && !accentedClickBuffer.isEmpty
                 let buffer = useAccent ? accentedClickBuffer : clickBuffer
                 let bufferLength = useAccent ? accentedClickBufferLength : clickBufferLength
                 
