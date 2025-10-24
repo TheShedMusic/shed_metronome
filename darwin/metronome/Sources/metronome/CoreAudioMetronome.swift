@@ -159,6 +159,8 @@ class CoreAudioMetronome {
         
         isPlaying = true
         currentSamplePosition = 0
+        lastBeatFired = -1  // Reset so first beat fires correctly
+        currentBeat = 0     // Start on beat 0
         
         os_log("Metronome started", log: logger, type: .info)
     }
@@ -821,13 +823,16 @@ class CoreAudioMetronome {
             // Calculate position within the beat cycle
             let beatPosition = samplePos.truncatingRemainder(dividingBy: samplesPerBeat)
             
-            // Calculate which beat we're on
+            // Calculate which beat we're on (globally)
             let beatNumber = Int(samplePos / samplesPerBeat)
+            
+            // Calculate which tick in the bar we're on (for THIS sample)
+            let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
             
             // Fire beat callback on beat transitions (not every sample!)
             if beatNumber != lastBeatFired && beatPosition < 100 { // Within first 100 samples of beat
                 lastBeatFired = beatNumber
-                let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
+                currentBeat = tickInBar  // Update for UI callbacks
                 
                 // Fire callback on main thread (not real-time safe, but necessary)
                 if let callback = beatCallback {
@@ -835,17 +840,15 @@ class CoreAudioMetronome {
                         callback(tickInBar)
                     }
                 }
-                
-                // Update current beat for accent pattern
-                currentBeat = tickInBar
             }
             
             // If we're at the start of a beat (within click buffer length)
             if beatPosition < Float64(clickBufferLength) {
                 let clickIndex = Int(beatPosition)
                 
-                // Choose click buffer based on accent pattern (uses stored currentBeat, not calculated per-sample)
-                let useAccent = (timeSignature > 1) && (currentBeat == 0) && !accentedClickBuffer.isEmpty
+                // Choose click buffer based on which tick we're ACTUALLY on (calculated above, not stored)
+                // This ensures we use the correct click sound even if the callback hasn't fired yet
+                let useAccent = (timeSignature > 1) && (tickInBar == 0) && !accentedClickBuffer.isEmpty
                 let buffer = useAccent ? accentedClickBuffer : clickBuffer
                 let bufferLength = useAccent ? accentedClickBufferLength : clickBufferLength
                 
