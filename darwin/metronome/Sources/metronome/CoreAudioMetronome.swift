@@ -370,7 +370,7 @@ class CoreAudioMetronome {
         // Calculate latency compensation based on empirical measurement
         // System reports ~2.4ms input latency, but actual measured delay is ~36ms
         // Using the measured value for accurate compensation
-        let actualLatencySeconds = 0.036  // 36ms measured empirically
+        let actualLatencySeconds = 0.030  // 30ms average of several devices
         self.latencyCompensationInSamples = Int(actualLatencySeconds * sampleRate)
         
         // Create circular buffer for click delay
