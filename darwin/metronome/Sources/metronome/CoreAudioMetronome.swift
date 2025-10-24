@@ -94,7 +94,7 @@ class CoreAudioMetronome {
     private var limiterRight = SimpleLimiter()
     
     /// Whether to use low-latency mode with limiter (true) or quality mode with delay compensation (false)
-    private var useLowLatencyMode: Bool = true
+    private var useLowLatencyMode: Bool = false
     
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
@@ -815,47 +815,47 @@ class CoreAudioMetronome {
         memset(leftBuffer, 0, frameCount * MemoryLayout<Float>.size)
         memset(rightBuffer, 0, frameCount * MemoryLayout<Float>.size)
         
-        var frameIndex = 0
         var samplePos = currentSamplePosition
         
-        while frameIndex < frameCount {
-            // Calculate position within the current beat cycle
+        for frameIndex in 0..<frameCount {
+            // Calculate position within the beat cycle
             let beatPosition = samplePos.truncatingRemainder(dividingBy: samplesPerBeat)
             
-            // Calculate which beat we're on (globally)
+            // Calculate which beat we're on
             let beatNumber = Int(samplePos / samplesPerBeat)
             
-            // Calculate which tick in the bar we're on (for accent pattern)
-            let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
-            
-            // Determine which click sound to use for THIS beat
-            let useAccent = (timeSignature > 1) && (tickInBar == 0) && !accentedClickBuffer.isEmpty
-            let clickSoundBuffer = useAccent ? accentedClickBuffer : clickBuffer
-            let clickSoundLength = useAccent ? accentedClickBufferLength : clickBufferLength
-            
-            // Fire beat callback on beat transitions
-            if beatNumber != lastBeatFired && beatPosition < 100 {
+            // Fire beat callback on beat transitions (not every sample!)
+            if beatNumber != lastBeatFired && beatPosition < 100 { // Within first 100 samples of beat
                 lastBeatFired = beatNumber
-                currentBeat = tickInBar  // Update for UI
+                let tickInBar = timeSignature > 1 ? (beatNumber % timeSignature) : 0
                 
+                // Fire callback on main thread (not real-time safe, but necessary)
                 if let callback = beatCallback {
                     DispatchQueue.main.async {
                         callback(tickInBar)
                     }
                 }
+                
+                // Update current beat for accent pattern
+                currentBeat = tickInBar
             }
             
-            // If we're within a click sound, copy samples from it
-            if beatPosition < Float64(clickSoundLength) {
+            // If we're at the start of a beat (within click buffer length)
+            if beatPosition < Float64(clickBufferLength) {
                 let clickIndex = Int(beatPosition)
                 
-                if clickIndex < clickSoundBuffer.count {
-                    leftBuffer[frameIndex] = clickSoundBuffer[clickIndex]
-                    rightBuffer[frameIndex] = clickSoundBuffer[clickIndex]
+                // Choose click buffer based on accent pattern (uses stored currentBeat, not calculated per-sample)
+                let useAccent = (timeSignature > 1) && (currentBeat == 0) && !accentedClickBuffer.isEmpty
+                let buffer = useAccent ? accentedClickBuffer : clickBuffer
+                let bufferLength = useAccent ? accentedClickBufferLength : clickBufferLength
+                
+                if clickIndex < bufferLength && clickIndex < buffer.count {
+                    let sample = buffer[clickIndex]
+                    leftBuffer[frameIndex] = sample
+                    rightBuffer[frameIndex] = sample
                 }
             }
             
-            frameIndex += 1
             samplePos += 1
         }
     }
