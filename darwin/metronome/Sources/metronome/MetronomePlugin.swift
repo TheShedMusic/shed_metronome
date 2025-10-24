@@ -138,7 +138,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
               }
               // Only Core Audio implementation supports this
               if let coreAudioAdapter = metronome as? CoreAudioMetronomeAdapter {
-                  coreAudioAdapter.metronome.setLowLatencyMode(enabled: enabled)
+                  coreAudioAdapter.setLowLatencyMode(enabled: enabled)
                   result(nil)
               } else {
                   result(FlutterError(code: "UNSUPPORTED",

@@ -187,4 +187,8 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
             handler.send(res: tick)
         }
     }
+    
+    func setLowLatencyMode(enabled: Bool) {
+        coreAudio.setLowLatencyMode(enabled: enabled)
+    }
 }
