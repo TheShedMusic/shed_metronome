@@ -2,6 +2,33 @@ import AVFoundation
 import AudioToolbox
 import os.log
 
+/// Simple soft-knee limiter to prevent clipping
+/// Uses tanh() for smooth, musical compression without look-ahead (zero latency)
+class SimpleLimiter {
+    private let threshold: Float = 0.8      // Start compressing at 80% (-1.94 dBFS)
+    private let ceiling: Float = 0.95       // Hard ceiling at 95% (-0.44 dBFS)
+    
+    /// Apply soft-knee limiting to prevent harsh clipping
+    func process(_ sample: Float) -> Float {
+        let absSample = abs(sample)
+        
+        // Below threshold: pass through unchanged
+        if absSample < threshold {
+            return sample
+        }
+        
+        // Above threshold: soft compression
+        let excess = absSample - threshold
+        let range = ceiling - threshold
+        
+        // Soft knee curve (logarithmic)
+        let compressed = threshold + (range * tanh(excess / range))
+        
+        // Preserve sign
+        return sample >= 0 ? compressed : -compressed
+    }
+}
+
 /// Core Audio-based metronome with sample-accurate timing and real-time mixing
 /// Uses Remote I/O Audio Unit with unified render callback for perfect sync between mic and clicks
 class CoreAudioMetronome {
@@ -53,6 +80,12 @@ class CoreAudioMetronome {
     
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
+    
+    /// Limiter for left channel (prevents clipping)
+    private var limiterLeft = SimpleLimiter()
+    
+    /// Limiter for right channel (prevents clipping)
+    private var limiterRight = SimpleLimiter()
     
     /// Circular buffer for passing audio from render callback to file writer
     private var audioBuffer: CircularBuffer<Float>?
@@ -608,11 +641,14 @@ class CoreAudioMetronome {
         
         // Mix in mic audio if recording
         if isRecording, let micL = micLeft, let micR = micRight {
+            // Apply limiter to mic input to prevent clipping
             // Apply direct monitoring: only mix mic to output if enabled
             if directMonitoringEnabled {
                 for i in 0..<Int(frameCount) {
-                    left[i] += micL[i] * micVolume
-                    right[i] += micR[i] * micVolume
+                    let limitedMicLeft = limiterLeft.process(micL[i] * micVolume)
+                    let limitedMicRight = limiterRight.process(micR[i] * micVolume)
+                    left[i] += limitedMicLeft
+                    right[i] += limitedMicRight
                 }
             }
             
@@ -620,9 +656,13 @@ class CoreAudioMetronome {
             // Interleave stereo samples: L, R, L, R, L, R...
             if let buffer = audioBuffer {
                 for i in 0..<Int(frameCount) {
-                    // Mix mic with clicks for recording (regardless of monitoring setting)
-                    let recordLeft = left[i] + (directMonitoringEnabled ? 0.0 : micL[i] * micVolume)
-                    let recordRight = right[i] + (directMonitoringEnabled ? 0.0 : micR[i] * micVolume)
+                    // Apply limiter to mic before mixing with clicks
+                    let limitedMicLeft = limiterLeft.process(micL[i] * micVolume)
+                    let limitedMicRight = limiterRight.process(micR[i] * micVolume)
+                    
+                    // Mix limited mic with clicks for recording (regardless of monitoring setting)
+                    let recordLeft = left[i] + (directMonitoringEnabled ? 0.0 : limitedMicLeft)
+                    let recordRight = right[i] + (directMonitoringEnabled ? 0.0 : limitedMicRight)
                     
                     // Write left channel
                     _ = buffer.write(recordLeft)
