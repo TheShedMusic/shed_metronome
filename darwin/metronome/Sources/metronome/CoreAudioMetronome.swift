@@ -338,6 +338,10 @@ class CoreAudioMetronome {
         
         try session.setActive(true)
         
+        // IMPORTANT: Force output to speaker (bottom speaker) instead of receiver (earpiece)
+        // .measurement mode overrides .defaultToSpeaker, so we need to explicitly set the route
+        try session.overrideOutputAudioPort(.speaker)
+        
         // Update sample rate to match hardware
         self.sampleRate = session.sampleRate
         self.audioFormat = AudioStreamBasicDescription.floatFormat(
@@ -346,7 +350,7 @@ class CoreAudioMetronome {
         )
         updateSamplesPerBeat()
         
-        os_log("Audio session configured: %f Hz, buffer: %f s",
+        os_log("Audio session configured: %f Hz, buffer: %f s, output: speaker",
                log: logger, type: .info,
                session.sampleRate,
                session.ioBufferDuration)
