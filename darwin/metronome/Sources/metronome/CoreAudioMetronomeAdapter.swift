@@ -12,7 +12,7 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     private var _bpm: Int = 120
     private var _timeSignature: Int = 4
     private var _volume: Float = 1.0
-    private var _micVolume: Float = 1.0
+    private var _recordedClickVolume: Float = 0.75
     private var _isPlaying: Bool = false
     private var _recordingPath: String?
     
@@ -114,9 +114,9 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         // Nothing to do here
     }
     
-    func setMicVolume(_ volume: Float) {
-        _micVolume = volume
-        coreAudio.setMicVolume(volume)
+    func setRecordedClickVolume(_ volume: Float) {
+        _recordedClickVolume = volume
+        coreAudio.setRecordedClickVolume(volume)
     }
     
     func setDirectMonitoring(enabled: Bool) {

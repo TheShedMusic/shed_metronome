@@ -48,8 +48,8 @@ class CoreAudioMetronome {
     /// Beat callback handler
     private var beatCallback: ((Int) -> Void)?
     
-    /// Microphone input volume (0.0 to 1.0)
-    private var micVolume: Float = 1.0
+    /// Click volume in recording (1.0 for drum mode, 0.75 for normal mode)
+    private var recordedClickVolume: Float = 0.75
     
     /// Whether direct monitoring is enabled (hearing yourself through headphones)
     private var directMonitoringEnabled: Bool = true
@@ -138,10 +138,10 @@ class CoreAudioMetronome {
         os_log("BPM set to %f", log: logger, type: .info, newBPM)
     }
     
-    /// Sets the microphone input volume
-    func setMicVolume(_ volume: Float) {
-        self.micVolume = max(0.0, min(1.0, volume))  // Clamp to 0.0-1.0
-        os_log("Mic volume set to %f", log: logger, type: .info, micVolume)
+    /// Sets the recorded click volume (1.0 for drum mode, 0.75 for normal)
+    func setRecordedClickVolume(_ volume: Float) {
+        self.recordedClickVolume = max(0.0, min(1.0, volume))  // Clamp to 0.0-1.0
+        os_log("Recorded click volume set to %f", log: logger, type: .info, recordedClickVolume)
     }
     
     /// Enable or disable direct monitoring (hearing yourself through headphones)
@@ -607,33 +607,19 @@ class CoreAudioMetronome {
         }
         
         // Mix in mic audio if recording
-        if isRecording, let micL = micLeft, let micR = micRight {
-            // Apply direct monitoring: only mix mic to output if enabled
-            if directMonitoringEnabled {
-                for i in 0..<Int(frameCount) {
-                    let scaledMicLeft = micL[i] * micVolume
-                    let scaledMicRight = micR[i] * micVolume
-                    left[i] += scaledMicLeft
-                    right[i] += scaledMicRight
-                }
-            }
-            
-            // Always write mixed audio (clicks + mic) to circular buffer for file writing
-            // Interleave stereo samples: L, R, L, R, L, R...
-            if let buffer = audioBuffer {
-                for i in 0..<Int(frameCount) {
-                    // Apply volume to mic before mixing with clicks
-                    let scaledMicLeft = micL[i] * micVolume
-                    let scaledMicRight = micR[i] * micVolume
-                    
-                    // Mix scaled mic with clicks for recording (regardless of monitoring setting)
-                    let recordLeft = left[i] + (directMonitoringEnabled ? 0.0 : scaledMicLeft)
-                    let recordRight = right[i] + (directMonitoringEnabled ? 0.0 : scaledMicRight)
-                    
-                    // Write left channel
-                    _ = buffer.write(recordLeft)
-                    // Write right channel
-                    _ = buffer.write(recordRight)
+        if isRecording, let micL = micLeft, let micR = micRight, let buffer = audioBuffer {
+            // Single loop: mix scaled clicks with full-volume mic, write to file, add to output for monitoring
+            for i in 0..<Int(frameCount) {
+                // Recording: scale clicks for recording, add full-volume mic
+                let recordLeft = (left[i] * recordedClickVolume) + micL[i]
+                let recordRight = (right[i] * recordedClickVolume) + micR[i]
+                _ = buffer.write(recordLeft)
+                _ = buffer.write(recordRight)
+                
+                // Direct monitoring: add full-volume mic to speaker output (after recording)
+                if directMonitoringEnabled {
+                    left[i] += micL[i]
+                    right[i] += micR[i]
                 }
             }
         }

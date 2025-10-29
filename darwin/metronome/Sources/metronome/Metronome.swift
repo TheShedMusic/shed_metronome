@@ -94,8 +94,10 @@ class Metronome: MetronomeInterface {
             print("[Metronome] Microphone ready for recording")
     }
     
-    public func setMicVolume(_ volume: Float) {
-        micVolumeNode?.outputVolume = max(0.0, min(1.0, volume))
+    public func setRecordedClickVolume(_ volume: Float) {
+        // Legacy implementation doesn't support separate click volume for recording
+        // This is a no-op for legacy mode
+        print("[Metronome] setRecordedClickVolume(\(volume)) - no effect in legacy mode")
     }
     
     public func setDirectMonitoring(enabled: Bool) {

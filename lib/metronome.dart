@@ -130,12 +130,12 @@ class Metronome {
     }
   }
 
-  /// set microphone volume (0.0 to 1.0)
-  Future<void> setMicVolume(double volume) async {
+  /// set recorded click volume (1.0 for drum mode, 0.75 for normal mode)
+  Future<void> setRecordedClickVolume(double volume) async {
     try {
-      await MetronomePlatform.instance.setMicVolume(volume);
+      await MetronomePlatform.instance.setRecordedClickVolume(volume);
     } catch (e) {
-      print('[Metronome] Error setting mic volume: $e');
+      print('[Metronome] Error setting recorded click volume: $e');
     }
   }
 

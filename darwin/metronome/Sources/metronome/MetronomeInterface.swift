@@ -36,8 +36,8 @@ protocol MetronomeInterface {
     /// Enable microphone input
     func enableMicrophone() throws
     
-    /// Set microphone volume
-    func setMicVolume(_ volume: Float)
+    /// Set recorded click volume (1.0 for drum mode, 0.75 for normal)
+    func setRecordedClickVolume(_ volume: Float)
     
     /// Enable or disable direct monitoring (hearing yourself through headphones)
     func setDirectMonitoring(enabled: Bool)

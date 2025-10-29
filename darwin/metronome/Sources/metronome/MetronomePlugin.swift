@@ -82,7 +82,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                                       message: "Failed to enable microphone: \(error.localizedDescription)",
                                       details: nil))
               }
-          case "setMicVolume":
+          case "setRecordedClickVolume":
               guard let args = attributes,
                     let volume = args["volume"] as? Double,
                     volume >= 0.0 && volume <= 1.0 else {
@@ -91,7 +91,7 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                                       details: nil))
                   return
               }
-              metronome?.setMicVolume(Float(volume))
+              metronome?.setRecordedClickVolume(Float(volume))
               result(nil)
           case "setDirectMonitoring":
               guard let args = attributes,

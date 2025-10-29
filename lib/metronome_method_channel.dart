@@ -248,13 +248,13 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
-  Future<void> setMicVolume(double volume) async {
+  Future<void> setRecordedClickVolume(double volume) async {
     if (volume < 0.0 || volume > 1.0) {
-      throw Exception('Mic volume must be between 0.0 and 1.0'); 
+      throw Exception('Recorded click volume must be between 0.0 and 1.0'); 
     }
 
     try {
-      await methodChannel.invokeMethod<void>('setMicVolume', {
+      await methodChannel.invokeMethod<void>('setRecordedClickVolume', {
         'volume': volume,
       });
     } catch (e) {
