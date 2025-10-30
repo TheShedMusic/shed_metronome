@@ -91,6 +91,14 @@ abstract class MetronomePlatform extends PlatformInterface {
     throw UnimplementedError('enableMicrophone() has not been implemented.');
   }
 
+  Future<bool> requestMicrophonePermission() {
+    throw UnimplementedError('requestMicrophonePermission() has not been implemented.');
+  }
+
+  Future<bool> checkMicrophonePermission() {
+    throw UnimplementedError('checkMicrophonePermission() has not been implemented.');
+  }
+
   Future<void> setRecordedClickVolume(double volume) {
     throw UnimplementedError('setRecordedClickVolume() has not been implemented.');
   }

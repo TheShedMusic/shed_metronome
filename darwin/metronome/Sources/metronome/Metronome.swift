@@ -94,6 +94,22 @@ class Metronome: MetronomeInterface {
             print("[Metronome] Microphone ready for recording")
     }
     
+    /// Request microphone permission from the user
+    public func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
+        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+            print("[Metronome] Microphone permission \(granted ? "granted" : "denied")")
+            completion(granted)
+        }
+    }
+    
+    /// Check current microphone permission status
+    public func checkMicrophonePermission() -> Bool {
+        let status = AVAudioSession.sharedInstance().recordPermission
+        let granted = (status == .granted)
+        print("[Metronome] Microphone permission status: \(granted ? "granted" : "denied/undetermined")")
+        return granted
+    }
+    
     public func setRecordedClickVolume(_ volume: Float) {
         // Legacy implementation doesn't support separate click volume for recording
         // This is a no-op for legacy mode
