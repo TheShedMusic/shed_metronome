@@ -248,32 +248,6 @@ class MethodChannelMetronome extends MetronomePlatform {
   }
 
   @override
-  Future<bool> requestMicrophonePermission() async {
-    try {
-      final result = await methodChannel.invokeMethod<bool>('requestMicrophonePermission');
-      return result ?? false;
-    } catch (e) {
-      if (kDebugMode) {
-        print('[Metronome] Error requesting microphone permission: $e');
-      }
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> checkMicrophonePermission() async {
-    try {
-      final result = await methodChannel.invokeMethod<bool>('checkMicrophonePermission');
-      return result ?? false;
-    } catch (e) {
-      if (kDebugMode) {
-        print('[Metronome] Error checking microphone permission: $e');
-      }
-      return false;
-    }
-  }
-
-  @override
   Future<void> setRecordedClickVolume(double volume) async {
     if (volume < 0.0 || volume > 1.0) {
       throw Exception('Recorded click volume must be between 0.0 and 1.0'); 

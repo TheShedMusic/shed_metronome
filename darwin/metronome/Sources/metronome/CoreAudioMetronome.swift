@@ -150,22 +150,6 @@ class CoreAudioMetronome {
         os_log("Direct monitoring %@", log: logger, type: .info, enabled ? "enabled" : "disabled")
     }
     
-    /// Request microphone permission from the user
-    func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            os_log("Microphone permission %@", log: self.logger, type: .info, granted ? "granted" : "denied")
-            completion(granted)
-        }
-    }
-    
-    /// Check current microphone permission status
-    func checkMicrophonePermission() -> Bool {
-        let status = AVAudioSession.sharedInstance().recordPermission
-        let granted = (status == .granted)
-        os_log("Microphone permission status: %@", log: logger, type: .info, granted ? "granted" : "denied/undetermined")
-        return granted
-    }
-    
     /// Starts recording (starts metronome if not already playing)
     func startRecording(path: String) throws {
         guard !isRecording else { return }

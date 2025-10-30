@@ -123,14 +123,6 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         coreAudio.setDirectMonitoring(enabled: enabled)
     }
     
-    func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
-        coreAudio.requestMicrophonePermission(completion: completion)
-    }
-    
-    func checkMicrophonePermission() -> Bool {
-        return coreAudio.checkMicrophonePermission()
-    }
-    
     func startRecording(path: String) -> Bool {
         _recordingPath = path
         recordingStartTime = Date().timeIntervalSince1970

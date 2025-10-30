@@ -123,33 +123,9 @@ class Metronome {
   Future<bool> enableMicrophone() async {
     try {
       final result = await MetronomePlatform.instance.enableMicrophone();
-      return result;
+      return result ?? false;
     } catch (e) {
       print('[Metronome] Error enabling microphone: $e');
-      return false;
-    }
-  }
-
-  /// Request microphone permission from the user
-  /// Returns true if permission is granted, false otherwise
-  Future<bool> requestMicrophonePermission() async {
-    try {
-      final result = await MetronomePlatform.instance.requestMicrophonePermission();
-      return result;
-    } catch (e) {
-      print('[Metronome] Error requesting microphone permission: $e');
-      return false;
-    }
-  }
-
-  /// Check current microphone permission status
-  /// Returns true if permission is granted, false if denied or undetermined
-  Future<bool> checkMicrophonePermission() async {
-    try {
-      final result = await MetronomePlatform.instance.checkMicrophonePermission();
-      return result;
-    } catch (e) {
-      print('[Metronome] Error checking microphone permission: $e');
       return false;
     }
   }
