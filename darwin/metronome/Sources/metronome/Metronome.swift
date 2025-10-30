@@ -87,9 +87,11 @@ class Metronome: MetronomeInterface {
     }
     /// Enable microphone input and connect it to the mixer
     /// This must be called before recording to capture mic audio
-    public func enableMicrophone() throws {
+    public func enableMicrophone(completion: @escaping (Bool) -> Void) {
         guard inputNode != nil && micVolumeNode != nil else {
-            throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey: "Microphone input not initialized"])
+            print("[Metronome] Microphone input not initialized")
+            completion(false)
+            return
         }
         
 #if os(iOS)
@@ -97,16 +99,30 @@ class Metronome: MetronomeInterface {
         let permissionStatus = AVAudioSession.sharedInstance().recordPermission
         print("[Metronome] Microphone permission status: \(permissionStatus.rawValue)")
         
-        if permissionStatus == .denied {
+        switch permissionStatus {
+        case .granted:
+            print("[Metronome] Microphone permission already granted")
+            completion(true)
+            
+        case .denied:
             print("[Metronome] Microphone permission DENIED")
-            throw NSError(domain: "Metronome", code: -2, userInfo: [NSLocalizedDescriptionKey: "Microphone permission denied"])
-        } else if permissionStatus == .undetermined {
-            print("[Metronome] Microphone permission UNDETERMINED - need to request")
-            throw NSError(domain: "Metronome", code: -3, userInfo: [NSLocalizedDescriptionKey: "Microphone permission not requested yet"])
+            completion(false)
+            
+        case .undetermined:
+            print("[Metronome] Microphone permission undetermined, requesting now...")
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                print("[Metronome] Permission request result: \(granted ? "GRANTED" : "DENIED")")
+                completion(granted)
+            }
+            
+        @unknown default:
+            print("[Metronome] Unknown permission status")
+            completion(false)
         }
+#else
+        // Non-iOS platforms - assume permission granted
+        completion(true)
 #endif
-        
-        print("[Metronome] Microphone ready for recording")
     }
     
     public func setRecordedClickVolume(_ volume: Float) {

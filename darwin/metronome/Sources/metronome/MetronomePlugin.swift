@@ -74,17 +74,13 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
                   metronome?.destroy()
                 break;
           case "enableMicrophone":
-              do {
-                  try metronome?.enableMicrophone()
-                  print("[MetronomePlugin] enableMicrophone() succeeded - returning true")
-                  result(true)
-              } catch let error as NSError {
-                  print("[MetronomePlugin] enableMicrophone() failed: \(error.localizedDescription)")
-                  // Return false instead of error so Flutter gets a boolean
-                  result(false)
-              } catch {
-                  print("[MetronomePlugin] enableMicrophone() failed with unknown error")
-                  result(false)
+              print("[MetronomePlugin] enableMicrophone() called, requesting permission...")
+              metronome?.enableMicrophone { granted in
+                  // Must call result on main thread
+                  DispatchQueue.main.async {
+                      print("[MetronomePlugin] enableMicrophone() completed with result: \(granted)")
+                      result(granted)
+                  }
               }
           case "setRecordedClickVolume":
               guard let args = attributes,

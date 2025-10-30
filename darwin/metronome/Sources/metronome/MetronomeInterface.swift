@@ -33,8 +33,8 @@ protocol MetronomeInterface {
     /// Check if playing
     var isPlaying: Bool { get }
     
-    /// Enable microphone input
-    func enableMicrophone() throws
+    /// Enable microphone input with permission check (async with completion handler)
+    func enableMicrophone(completion: @escaping (Bool) -> Void)
     
     /// Set recorded click volume (1.0 for drum mode, 0.75 for normal)
     func setRecordedClickVolume(_ volume: Float)

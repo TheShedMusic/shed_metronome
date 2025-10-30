@@ -109,7 +109,7 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         return _isPlaying
     }
     
-    func enableMicrophone() throws {
+    func enableMicrophone(completion: @escaping (Bool) -> Void) {
         // Check current microphone permission status
         let permission = AVAudioSession.sharedInstance().recordPermission
         
@@ -117,26 +117,24 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
         
         switch permission {
         case .granted:
-            print("[CoreAudioAdapter] ✓ Microphone permission granted")
-            return  // Success - permission granted
+            print("[CoreAudioAdapter] ✓ Microphone permission already granted")
+            completion(true)
+            
         case .denied:
             print("[CoreAudioAdapter] ✗ Microphone permission DENIED by user")
-            // Throw error so Flutter knows permission was denied
-            throw NSError(domain: "MetronomeError", code: 403, userInfo: [
-                NSLocalizedDescriptionKey: "Microphone permission denied. Please enable in Settings."
-            ])
+            completion(false)
+            
         case .undetermined:
-            print("[CoreAudioAdapter] ? Microphone permission undetermined (not yet requested)")
-            // iOS permission dialog should have been shown during audio session setup
-            // If we get here, it means the dialog was never shown or was bypassed
-            throw NSError(domain: "MetronomeError", code: 401, userInfo: [
-                NSLocalizedDescriptionKey: "Microphone permission not requested"
-            ])
+            print("[CoreAudioAdapter] ? Microphone permission undetermined, requesting now...")
+            // Request permission and wait for user's response
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                print("[CoreAudioAdapter] Permission request result: \(granted ? "GRANTED" : "DENIED")")
+                completion(granted)
+            }
+            
         @unknown default:
             print("[CoreAudioAdapter] ! Unknown permission status")
-            throw NSError(domain: "MetronomeError", code: 500, userInfo: [
-                NSLocalizedDescriptionKey: "Unknown permission status"
-            ])
+            completion(false)
         }
     }
     
