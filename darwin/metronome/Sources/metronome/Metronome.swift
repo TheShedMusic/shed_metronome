@@ -89,9 +89,24 @@ class Metronome: MetronomeInterface {
     /// This must be called before recording to capture mic audio
     public func enableMicrophone() throws {
         guard inputNode != nil && micVolumeNode != nil else {
-                throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey: "Microphone input not initialized"])
-            }
-            print("[Metronome] Microphone ready for recording")
+            throw NSError(domain: "Metronome", code: -1, userInfo: [NSLocalizedDescriptionKey: "Microphone input not initialized"])
+        }
+        
+#if os(iOS)
+        // Check microphone permission status
+        let permissionStatus = AVAudioSession.sharedInstance().recordPermission
+        print("[Metronome] Microphone permission status: \(permissionStatus.rawValue)")
+        
+        if permissionStatus == .denied {
+            print("[Metronome] Microphone permission DENIED")
+            throw NSError(domain: "Metronome", code: -2, userInfo: [NSLocalizedDescriptionKey: "Microphone permission denied"])
+        } else if permissionStatus == .undetermined {
+            print("[Metronome] Microphone permission UNDETERMINED - need to request")
+            throw NSError(domain: "Metronome", code: -3, userInfo: [NSLocalizedDescriptionKey: "Microphone permission not requested yet"])
+        }
+#endif
+        
+        print("[Metronome] Microphone ready for recording")
     }
     
     public func setRecordedClickVolume(_ volume: Float) {

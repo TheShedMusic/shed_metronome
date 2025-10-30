@@ -76,11 +76,15 @@ public class MetronomePlugin: NSObject, FlutterPlugin {
           case "enableMicrophone":
               do {
                   try metronome?.enableMicrophone()
+                  print("[MetronomePlugin] enableMicrophone() succeeded - returning true")
                   result(true)
+              } catch let error as NSError {
+                  print("[MetronomePlugin] enableMicrophone() failed: \(error.localizedDescription)")
+                  // Return false instead of error so Flutter gets a boolean
+                  result(false)
               } catch {
-                  result(FlutterError(code: "MICROPHONE_ERROR",
-                                      message: "Failed to enable microphone: \(error.localizedDescription)",
-                                      details: nil))
+                  print("[MetronomePlugin] enableMicrophone() failed with unknown error")
+                  result(false)
               }
           case "setRecordedClickVolume":
               guard let args = attributes,

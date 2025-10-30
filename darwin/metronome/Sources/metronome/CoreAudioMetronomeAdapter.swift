@@ -110,8 +110,34 @@ class CoreAudioMetronomeAdapter: MetronomeInterface {
     }
     
     func enableMicrophone() throws {
-        // Core Audio implementation has mic enabled by default
-        // Nothing to do here
+        // Check current microphone permission status
+        let permission = AVAudioSession.sharedInstance().recordPermission
+        
+        print("[CoreAudioAdapter] enableMicrophone() called, permission status: \(permission.rawValue)")
+        
+        switch permission {
+        case .granted:
+            print("[CoreAudioAdapter] ✓ Microphone permission granted")
+            return  // Success - permission granted
+        case .denied:
+            print("[CoreAudioAdapter] ✗ Microphone permission DENIED by user")
+            // Throw error so Flutter knows permission was denied
+            throw NSError(domain: "MetronomeError", code: 403, userInfo: [
+                NSLocalizedDescriptionKey: "Microphone permission denied. Please enable in Settings."
+            ])
+        case .undetermined:
+            print("[CoreAudioAdapter] ? Microphone permission undetermined (not yet requested)")
+            // iOS permission dialog should have been shown during audio session setup
+            // If we get here, it means the dialog was never shown or was bypassed
+            throw NSError(domain: "MetronomeError", code: 401, userInfo: [
+                NSLocalizedDescriptionKey: "Microphone permission not requested"
+            ])
+        @unknown default:
+            print("[CoreAudioAdapter] ! Unknown permission status")
+            throw NSError(domain: "MetronomeError", code: 500, userInfo: [
+                NSLocalizedDescriptionKey: "Unknown permission status"
+            ])
+        }
     }
     
     func setRecordedClickVolume(_ volume: Float) {
