@@ -154,7 +154,10 @@ class CoreAudioMetronome {
     func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
         AVAudioSession.sharedInstance().requestRecordPermission { granted in
             os_log("Microphone permission %@", log: self.logger, type: .info, granted ? "granted" : "denied")
-            completion(granted)
+            // Ensure callback happens on main thread for Flutter
+            DispatchQueue.main.async {
+                completion(granted)
+            }
         }
     }
     
