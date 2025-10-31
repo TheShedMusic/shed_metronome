@@ -164,10 +164,6 @@ class CoreAudioMetronome {
             try play()
         }
         
-        // Set recording flag FIRST so mic input works
-        isRecording = true
-        recordingStartSample = currentSamplePosition
-        
         // Allocate circular buffer (5 seconds of stereo audio)
         let bufferSize = Int(sampleRate * 5.0) * 2  // 5 seconds, 2 channels
         os_log("Allocating circular buffer: %d samples", log: logger, type: .info, bufferSize)
@@ -189,10 +185,14 @@ class CoreAudioMetronome {
             os_log("Starting file writer thread...", log: logger, type: .info)
             writer.start()
             
+            // Set recording flag AFTER everything is initialized and ready
+            // This ensures the render callback won't write samples until the buffer and file writer are ready
+            recordingStartSample = currentSamplePosition
+            isRecording = true
+            
             os_log("Recording started successfully at sample %f, path: %@", log: logger, type: .info, recordingStartSample, path)
         } catch {
-            // If file writer creation fails, revert recording state
-            isRecording = false
+            // If file writer creation fails, clean up
             audioBuffer = nil
             os_log("Failed to create file writer: %@", log: logger, type: .error, error.localizedDescription)
             throw error
